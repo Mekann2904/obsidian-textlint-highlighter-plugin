@@ -1,0 +1,316 @@
+/*
+
+This CSS file will be included with your plugin, and
+available in the app when your plugin is enabled.
+
+If your plugin does not need CSS, delete this file.
+
+*/
+
+/* Textlint Highlighter Plugin - Clean Style */
+
+.textlint-issues {
+  padding: 10px;
+}
+
+.textlint-issue {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--background-primary-alt);
+  transition: all 0.2s ease;
+}
+
+.textlint-issue-clickable:hover {
+  background: var(--background-secondary);
+  border-color: var(--interactive-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.textlint-issue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.9em;
+}
+
+.textlint-issue-location {
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+.textlint-issue-rule {
+  color: var(--text-muted);
+  font-size: 0.8em;
+  background: var(--background-modifier-border);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.textlint-issue-message {
+  margin-bottom: 10px;
+  line-height: 1.4;
+  color: var(--text-normal);
+}
+
+
+
+/* パネル全体のスタイル */
+.view-content[data-type="textlint-view"] {
+  padding: 16px;
+}
+
+.view-content[data-type="textlint-view"] h2 {
+  margin-bottom: 16px;
+  color: var(--text-normal);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 8px;
+}
+
+/* Textlint パネルのスタイル */
+.textlint-content {
+  padding: 10px;
+}
+
+.textlint-no-issues {
+  color: var(--text-muted);
+  font-style: italic;
+  text-align: center;
+  margin: 20px 0;
+}
+
+.textlint-file-header {
+  margin-bottom: 15px;
+  padding: 8px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+}
+
+.textlint-count {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
+
+.textlint-issues-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.textlint-issue-item {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  padding: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.textlint-issue-item:hover {
+  background-color: var(--background-secondary);
+}
+
+.textlint-location {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.textlint-line-col {
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.textlint-severity {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.75em;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.textlint-severity.error {
+  background-color: var(--text-error);
+  color: white;
+}
+
+.textlint-severity.warning {
+  background-color: var(--text-warning);
+  color: white;
+}
+
+.textlint-message {
+  font-size: 0.9em;
+  line-height: 1.4;
+  margin-bottom: 5px;
+  color: var(--text-normal);
+}
+
+.textlint-rule-id {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+}
+
+/* 修正案のスタイル */
+.textlint-fix-container {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--background-secondary-alt);
+  border-radius: 4px;
+  border-left: 3px solid var(--color-accent);
+}
+
+.textlint-fix-label {
+  font-size: 0.8em;
+  font-weight: bold;
+  color: var(--color-accent);
+  margin-bottom: 4px;
+}
+
+.textlint-fix-preview {
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+  background: var(--background-primary);
+  padding: 4px 6px;
+  border-radius: 3px;
+  margin-bottom: 8px;
+  color: var(--text-normal);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.textlint-fix-button {
+  background: var(--color-accent);
+  color: var(--text-on-accent);
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.textlint-fix-button:hover {
+  background: var(--color-accent-hover);
+}
+
+.textlint-fix-button:active {
+  background: var(--color-accent-active);
+}
+
+/* ビューのタイトル */
+.workspace-leaf-content[data-type="textlint-view"] .view-header-title {
+  font-weight: bold;
+}
+
+/* ハイライトスタイル */
+.textlint-current-highlight {
+  background-color: rgba(255, 255, 0, 0.4) !important;
+  border-bottom: 2px solid #ff9500 !important;
+  border-radius: 2px !important;
+  animation: textlint-highlight-fade 3s ease-out forwards;
+}
+
+@keyframes textlint-highlight-fade {
+  0% {
+    background-color: rgba(255, 255, 0, 0.6);
+    border-bottom-color: #ff6600;
+  }
+  70% {
+    background-color: rgba(255, 255, 0, 0.4);
+    border-bottom-color: #ff9500;
+  }
+  100% {
+    background-color: rgba(255, 255, 0, 0.2);
+    border-bottom-color: #ffcc00;
+  }
+}
+
+/* ヘッダーと実行ボタンのスタイル */
+.textlint-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.textlint-header h2 {
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+.textlint-run-btn {
+  padding: 8px 16px;
+  font-size: 0.9em;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.textlint-run-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.textlint-run-btn:active {
+  transform: translateY(0);
+}
+
+/* Textlint エラーハイライト（エディタ内） - Obsidian CSS変数使用 */
+.textlint-highlight {
+  background-color: rgba(var(--color-accent-rgb), 0.1) !important;
+  border-bottom: 2px solid var(--color-accent) !important;
+  border-radius: 2px !important;
+  position: relative !important;
+  cursor: help !important;
+}
+
+.textlint-highlight:hover {
+  background-color: rgba(var(--color-accent-rgb), 0.2) !important;
+  border-bottom-color: var(--color-accent) !important;
+}
+
+/* エラーの種類別スタイリング - Obsidian変数使用 */
+.textlint-severity-1 {
+  /* Warning - 警告色 */
+  background-color: rgba(var(--color-yellow-rgb), 0.1) !important;
+  border-bottom-color: var(--color-yellow) !important;
+}
+
+.textlint-severity-2 {
+  /* Error - エラー色 */
+  background-color: rgba(var(--color-red-rgb), 0.1) !important;
+  border-bottom-color: var(--color-red) !important;
+}
+
+/* Obsidianのシンタックスハイライトと調和 */
+.cm-editor .cm-line .textlint-highlight {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 85%,
+    var(--text-warning) 85%,
+    var(--text-warning) 100%
+  ) !important;
+  border-bottom: none !important;
+}
+
+.cm-editor .cm-line .textlint-severity-2 {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 85%,
+    var(--text-error) 85%,
+    var(--text-error) 100%
+  ) !important;
+}
