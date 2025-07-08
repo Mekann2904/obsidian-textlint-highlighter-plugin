@@ -9,6 +9,7 @@ import {
 } from './types';
 import { RuleLoader } from './rules/RuleLoader';
 import { Cache, generateContentHash } from './utils/Cache';
+import { AdaptiveProcessor } from './utils/AdaptiveProcessor';
 import { EditorExtension } from './editor/EditorExtension';
 import { TextlintView } from './views/TextlintView';
 import { TextlintSettingTab } from './settings/TextlintSettingTab';
@@ -311,6 +312,15 @@ export class TextlintHighlightPlugin extends Plugin {
       const content = await this.app.vault.read(file);
       const contentHash = await generateContentHash(content);
       
+      // 適応的処理戦略を取得
+      const strategy = AdaptiveProcessor.getOptimalStrategy(content);
+      const optimizedSettings = AdaptiveProcessor.getOptimizedRuleSet(content, this.settings);
+      
+      if (this.settings.enableDebugLog) {
+        console.log('適応的処理戦略:', strategy);
+        console.log('最適化された設定:', optimizedSettings);
+      }
+      
       // 重複実行のチェック（高速化）
       if (this.lastProcessedFile === file.path && this.lastContentHash === contentHash) {
         if (this.settings.enableDebugLog) {
@@ -340,23 +350,29 @@ export class TextlintHighlightPlugin extends Plugin {
       this.lastProcessedFile = file.path;
       this.lastContentHash = contentHash;
       
-      // ルールの読み込み（キャッシュ済み）
-      const rules = await this.ruleLoader.loadRules(this.settings);
+      // 最適化されたルールの読み込み
+      const rules = await this.ruleLoader.loadRules(optimizedSettings);
       
       if (this.settings.enableDebugLog) {
         console.log('ファイル処理:', file.path);
         console.log('ルール数:', rules.length);
         console.log('コンテンツハッシュ:', contentHash.substring(0, 8) + '...');
+        console.log('処理戦略:', strategy.maxFileSize < 1000 ? 'フル処理' : '軽量処理');
       }
       
       // textlintの設定を生成
       const lintConfig = this.ruleLoader.generateLintConfig(rules);
       
       if (this.settings.enableDebugLog) {
-        console.log('Textlintを実行中...');
+        console.log('Textlintを実行中（タイムアウト:', strategy.processingTimeout, 'ms）...');
       }
       
-      const result = await this.kernel.lintText(content, lintConfig);
+      // Kuromoji最適化付きでtextlintを実行
+      const result = await AdaptiveProcessor.processWithKuromojiOptimization(
+        content,
+        (textContent) => this.kernel.lintText(textContent, lintConfig),
+        strategy
+      );
       
       const messages: TextlintMessage[] = result.messages.map((msg: TextlintKernelMessage) => ({
         line: msg.line,
