@@ -2,6 +2,7 @@ export interface TextlintPluginSettings {
   useTechnicalWritingPreset: boolean;
   useSpacingPreset: boolean;
   useJtfStylePreset: boolean;
+  useJapanesePreset: boolean;
   useCustomRules: boolean;
   enableDebugLog: boolean;
   useKuromoji: boolean;
@@ -16,12 +17,16 @@ export interface TextlintPluginSettings {
   useNoMixDearuDesumasu: boolean;
   useNoStartDuplicatedConjunction: boolean;
   useDateWeekdayMismatch: boolean;
+  useJaHiraku: boolean;
+  usePrh: boolean;
+  useAlex: boolean;
 }
 
 export const DEFAULT_SETTINGS: TextlintPluginSettings = {
   useTechnicalWritingPreset: true,
   useSpacingPreset: true,
   useJtfStylePreset: true,
+  useJapanesePreset: true,
   useCustomRules: true,
   enableDebugLog: true,
   useKuromoji: true,
@@ -34,7 +39,10 @@ export const DEFAULT_SETTINGS: TextlintPluginSettings = {
   useJaNoOrthographicVariants: true,
   useNoMixDearuDesumasu: true,
   useNoStartDuplicatedConjunction: true,
-  useDateWeekdayMismatch: true
+  useDateWeekdayMismatch: true,
+  useJaHiraku: true,
+  usePrh: true,
+  useAlex: true
 };
 
 export interface TextlintMessage {
@@ -76,6 +84,7 @@ export interface RuleConfig {
   module: any;
   setting: boolean;
   description: string;
+  options?: any;
 }
 
 export interface CacheEntry<T> {

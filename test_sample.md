@@ -198,6 +198,27 @@ But the system works well. After some investigation, we found the root cause. Th
 2025-01-15(Monday) should be checked.
 2024-02-29(Thursday) is wrong.
 
+## textlint-rule-preset-japanese（包括的日本語プリセット）テスト
+
+### 総合的な文章品質テスト
+この機能により効率的な作業が可能となり、開発者の生産性が向上しますが、設定項目が多いため初心者には難しく感じられるかもしれませんが、慣れると便利になります。
+
+このファイルは見れます。
+これは間違いないとは言えなくもないです。
+
+### 語彙・表記の統一テスト
+Github、Javascript、iphone で開発作業を行います。
+コンピューターとコンピュータ、プリンターとプリンタを使用。
+
+### 句読点・記号の使用テスト
+これは重要です！
+本当に必要ですか？
+
+### その他の包括的チェック
+私は彼は好きです。（助詞重複）
+材料不足で代替素材で製造。（助詞重複）
+これは非常に長い文章のテストで、一つの文に多くの情報を詰め込みすぎると読みにくくなってしまうため適切な長さで区切ることが重要ですが、このようにダラダラと続けると理解が困難になります。
+
 ### 日本語形式の日付曜日不一致
 2016年12月29日(金曜日)は間違いです。
 2025年1月15日(月曜日)もチェックされます。
@@ -210,3 +231,64 @@ But the system works well. After some investigation, we found the root cause. Th
 ### 年省略の日付（useCurrentYearIfMissing設定時）
 4月23日(月曜日)
 12月25日(金曜日)
+
+## ja-hiraku（漢字ひらく総合）テスト
+
+### 形式名詞・副詞・補助動詞の統合テスト
+この事について説明致します。その時にお手伝い下さい。あの所で作業を致します。
+
+### 包括的なひらくテスト
+先程頂いた資料について検討致しました。何処かで間違いが有る筈です。
+是非お越し下さい。宜しくお願い致します。
+
+## ja-hiragana-keishikimeishi（形式名詞ひらがな）テスト
+
+### 形式名詞の個別テスト
+この事が重要です。その時に説明します。あの所に行きます。
+どの場合でも対応します。同じ為に準備します。この通りに実行します。
+
+## ja-hiragana-fukushi（副詞ひらがな）テスト
+
+### 副詞の個別テスト
+丁度良い時間です。色々な方法があります。全て完了しました。
+余り詳しくありません。殆ど終わりました。随分時間が掛かりました。
+
+## ja-hiragana-hojodoushi（補助動詞ひらがな）テスト
+
+### 補助動詞の個別テスト
+お手伝い頂きありがとうございます。ご理解下さい。
+資料を見て頂けますか。説明して差し上げます。準備をして戴きます。
+
+## textlint-rule-prh（用語統一・禁止語句）テスト
+
+### 技術用語の表記ゆれ
+JavaScriptとjavascriptとJavascriptを使用します。
+GitHubとGithubを利用しています。
+iPhoneとIphoneの比較を行います。
+
+### ブランド名・製品名の統一
+MicrosoftとmicrosoftとMicroSoft。
+MacBookとmacbookとMacbook。
+Visual Studio CodeとVSCodeとvscode。
+
+### 一般的な表記ゆれ
+Webとweb、ウェブサイトとWebサイト。
+データベースとDB、データーベース。
+ソフトウェアとソフトウエア。
+
+## textlint-rule-alex（英語包摂性）テスト
+
+### 性別に関する表現
+Hey guys, let's start the meeting.
+The team is composed of guys from different departments.
+Each developer should update his code regularly.
+
+### 能力・状態に関する表現
+This code is crazy and totally insane.
+The design is retarded and needs improvement.
+Don't be lame about the implementation.
+
+### 一般的な差別的表現
+The system has some blind spots we need to address.
+This feature is for normal users only.
+The code is written by a slave process.

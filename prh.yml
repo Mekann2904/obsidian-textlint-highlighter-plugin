@@ -1,0 +1,77 @@
+version: 1
+rules:
+  # 技術用語の統一
+  - expected: JavaScript
+    patterns:
+      - Javascript
+      - javascript
+      - /java\s*script/i
+  
+  - expected: GitHub
+    patterns:
+      - Github
+      - github
+      - /git\s*hub/i
+  
+  - expected: iPhone
+    patterns:
+      - Iphone
+      - iphone
+  
+  - expected: Microsoft
+    patterns:
+      - microsoft
+      - MicroSoft
+      - MICROSOFT
+  
+  - expected: MacBook
+    patterns:
+      - macbook
+      - Macbook
+      - MACBOOK
+  
+  - expected: Visual Studio Code
+    patterns:
+      - VSCode
+      - vscode
+      - VS Code
+  
+  # ウェブ関連
+  - expected: Web
+    patterns:
+      - web
+  
+  - expected: Webサイト
+    patterns:
+      - ウェブサイト
+      - webサイト
+  
+  - expected: データベース
+    patterns:
+      - データーベース
+      - DB
+  
+  - expected: ソフトウェア
+    patterns:
+      - ソフトウエア
+      - software
+  
+  # カスタム禁止語句（例）
+  - expected: ""
+    patterns:
+      - 死ね
+      - バカ
+      - アホ
+      - クズ
+    message: "不適切な表現です"
+  
+  # 技術的に不正確な表現
+  - expected: "無効"
+    patterns:
+      - 無効化
+    message: "「無効」を使用してください"
+  
+  - expected: "有効"
+    patterns:
+      - 有効化
+    message: "「有効」を使用してください"

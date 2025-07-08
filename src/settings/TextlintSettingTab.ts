@@ -67,6 +67,12 @@ export class TextlintSettingTab extends PluginSettingTab {
         recommended: true
       },
       {
+        name: 'textlint-rule-preset-japanese',
+        desc: '包括的な日本語向けルール集（文章品質・読みやすさの全般的改善）',
+        setting: 'useJapanesePreset',
+        recommended: true
+      },
+      {
         name: '@textlint-ja/textlint-rule-preset-ai-writing',
         desc: 'AI生成文章の不自然な表現をチェック',
         setting: 'useCustomRules',
@@ -166,6 +172,21 @@ export class TextlintSettingTab extends PluginSettingTab {
         name: 'textlint-rule-date-weekday-mismatch',
         desc: '日付と曜日の不一致チェック（「2016-12-29(金曜日)」→「2016-12-29(木曜日)」など）',
         setting: 'useDateWeekdayMismatch'
+      },
+      {
+        name: 'textlint-rule-ja-hiraku',
+        desc: '漢字を「ひらく」総合ルール（形式名詞・副詞・補助動詞など包括的対応）',
+        setting: 'useJaHiraku'
+      },
+      {
+        name: 'textlint-rule-prh',
+        desc: '用語統一・禁止語句チェック（カスタマイズ可能な表記ゆれ・不適切表現の検出）',
+        setting: 'usePrh'
+      },
+      {
+        name: 'textlint-rule-alex',
+        desc: '英語包摂性チェック（差別的表現の検出・より適切な代替語句の提案）',
+        setting: 'useAlex'
       }
     ];
 

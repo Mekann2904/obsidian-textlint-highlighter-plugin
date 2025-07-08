@@ -1,5 +1,7 @@
 import { TextlintRule, TextlintPluginSettings, RuleConfig } from '../types';
 import { Cache } from '../utils/Cache';
+import * as path from 'path';
+import * as fs from 'fs';
 
 // Textlintモジュールの静的インポート
 // @ts-ignore
@@ -12,6 +14,8 @@ const presetJaSpacing = require('textlint-rule-preset-ja-spacing').default || re
 const presetAiWriting = require('@textlint-ja/textlint-rule-preset-ai-writing').default || require('@textlint-ja/textlint-rule-preset-ai-writing');
 // @ts-ignore
 const presetJtfStyle = require('textlint-rule-preset-jtf-style').default || require('textlint-rule-preset-jtf-style');
+// @ts-ignore
+const presetJapanese = require('textlint-rule-preset-japanese').default || require('textlint-rule-preset-japanese');
 // @ts-ignore
 const ruleNoDroppingI = require('@textlint-ja/textlint-rule-no-dropping-i').default || require('@textlint-ja/textlint-rule-no-dropping-i');
 // @ts-ignore
@@ -32,6 +36,13 @@ const ruleNoMixDearuDesumasu = require('textlint-rule-no-mix-dearu-desumasu').de
 const ruleNoStartDuplicatedConjunction = require('textlint-rule-no-start-duplicated-conjunction').default || require('textlint-rule-no-start-duplicated-conjunction');
 // @ts-ignore
 const ruleDateWeekdayMismatch = require('textlint-rule-date-weekday-mismatch').default || require('textlint-rule-date-weekday-mismatch');
+// @ts-ignore
+const ruleJaHiraku = require('textlint-rule-ja-hiraku').default || require('textlint-rule-ja-hiraku');
+// @ts-ignore
+const rulePrh = require('textlint-rule-prh').default || require('textlint-rule-prh');
+// @ts-ignore
+const ruleAlex = require('textlint-rule-alex').default || require('textlint-rule-alex');
+
 
 export class RuleLoader {
   private static instance: RuleLoader;
@@ -92,6 +103,10 @@ export class RuleLoader {
 
     if (settings.useJtfStylePreset) {
       presetTasks.push(this.loadJtfStylePreset());
+    }
+
+    if (settings.useJapanesePreset) {
+      presetTasks.push(this.loadJapanesePreset());
     }
 
     // 個別ルール
@@ -250,8 +265,63 @@ export class RuleLoader {
     return rules;
   }
 
+  private async loadJapanesePreset(): Promise<TextlintRule[]> {
+    const rules: TextlintRule[] = [];
+    
+    try {
+      const preset = presetJapanese;
+      if (preset && preset.rules) {
+        Object.entries(preset.rules).forEach(([ruleId, rule]) => {
+          const actualRule = this.extractRuleFunction(rule);
+          const ruleOptions = preset.rulesConfig?.[ruleId] === false ? false : 
+            (typeof preset.rulesConfig?.[ruleId] === 'object' ? preset.rulesConfig[ruleId] : true);
+          
+          if (ruleOptions !== false && actualRule) {
+            rules.push({
+              ruleId: `japanese/${ruleId}`,
+              rule: actualRule,
+              options: ruleOptions
+            });
+          }
+        });
+      }
+    } catch (error) {
+      console.error("日本語プリセットの読み込みに失敗:", error);
+    }
+    
+    return rules;
+  }
+
   private async loadIndividualRules(settings: TextlintPluginSettings): Promise<TextlintRule[]> {
     const rules: TextlintRule[] = [];
+    
+    // プラグインディレクトリの絶対パスを取得（複数候補を試す）
+    const currentDir = process.cwd();
+    const pathCandidates = [
+      path.join(currentDir, 'prh.yml'),
+      path.join(currentDir, '..', '..', '..', 'plugins', 'obsidian-textlint-highlighter-plugin', 'prh.yml'),
+      path.join(__dirname || currentDir, 'prh.yml'),
+      path.join(__dirname || currentDir, '..', 'prh.yml'),
+      path.join(__dirname || currentDir, '..', '..', 'prh.yml')
+    ];
+    
+    let prhConfigPath = '';
+    for (const candidate of pathCandidates) {
+      if (fs.existsSync(candidate)) {
+        prhConfigPath = candidate;
+        break;
+      }
+    }
+    
+    if (this.enableDebugLog) {
+      console.log(`Current directory: ${currentDir}`);
+      console.log(`Tried paths:`, pathCandidates);
+      console.log(`Found PRH config at: ${prhConfigPath}`);
+    }
+    
+    if (settings.usePrh && prhConfigPath === '') {
+      console.warn('PRH設定ファイル(prh.yml)が見つかりませんでした。PRHルールは無効になります。');
+    }
     
     const individualRules: RuleConfig[] = [
       { 
@@ -313,6 +383,27 @@ export class RuleLoader {
         module: ruleDateWeekdayMismatch,
         setting: settings.useDateWeekdayMismatch,
         description: '日付曜日不一致'
+      },
+      { 
+        name: 'ja-hiraku',
+        module: ruleJaHiraku,
+        setting: settings.useJaHiraku,
+        description: '漢字ひらく（総合）'
+      },
+      { 
+        name: 'prh',
+        module: rulePrh,
+        setting: settings.usePrh && prhConfigPath !== '',
+        description: '用語統一・禁止語句',
+        options: {
+          rulePaths: [prhConfigPath]
+        }
+      },
+      { 
+        name: 'alex',
+        module: ruleAlex,
+        setting: settings.useAlex,
+        description: '英語包摂性チェック'
       }
     ];
 
@@ -325,7 +416,7 @@ export class RuleLoader {
           rules.push({
             ruleId: `additional/${ruleInfo.name}`,
             rule: actualRule,
-            options: true
+            options: ruleInfo.options || true
           });
           
           if (this.enableDebugLog) {
@@ -379,6 +470,7 @@ export class RuleLoader {
       settings.useTechnicalWritingPreset ? 'tech' : '',
       settings.useSpacingPreset ? 'space' : '',
       settings.useJtfStylePreset ? 'jtf' : '',
+      settings.useJapanesePreset ? 'ja' : '',
       settings.useCustomRules ? 'ai' : '',
       settings.useNoDroppingI ? 'dropi' : '',
       settings.useNoInsertDroppingSa ? 'dropsa' : '',
@@ -389,7 +481,10 @@ export class RuleLoader {
       settings.useJaNoOrthographicVariants ? 'orthographic' : '',
       settings.useNoMixDearuDesumasu ? 'mixstyle' : '',
       settings.useNoStartDuplicatedConjunction ? 'conjunction' : '',
-      settings.useDateWeekdayMismatch ? 'dateweekday' : ''
+      settings.useDateWeekdayMismatch ? 'dateweekday' : '',
+      settings.useJaHiraku ? 'hiraku' : '',
+      settings.usePrh ? 'prh' : '',
+      settings.useAlex ? 'alex' : ''
     ].filter(Boolean);
     
     return keyParts.join('_') || 'empty';
