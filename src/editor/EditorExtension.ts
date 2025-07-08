@@ -10,8 +10,7 @@ export class EditorExtension {
   private memoryManager: MemoryManager;
 
   // State effects for managing highlights
-  public addHighlightEffect = StateEffect.define<TextlintMessage[]>();
-  public clearHighlightEffect = StateEffect.define<null>();
+  public updateHighlightsEffect = StateEffect.define<TextlintMessage[]>();
 
   constructor(app: any) {
     this.app = app;
@@ -29,17 +28,10 @@ export class EditorExtension {
       decorations = decorations.map(tr.changes);
       
       for (const effect of tr.effects) {
-        if (effect.is(this.clearHighlightEffect)) {
-          decorations = Decoration.none;
-        }
-        
-        if (effect.is(this.addHighlightEffect)) {
-          decorations = Decoration.none;
-          // 同期的にデコレーションを作成（ハイライト表示修正）
+        if (effect.is(this.updateHighlightsEffect)) {
+          // 渡されたメッセージから新しいデコレーションセットを作成
           const newDecorations = this.createDecorations(effect.value);
-          if (newDecorations.length > 0) {
-            decorations = Decoration.set(newDecorations, true);
-          }
+          decorations = Decoration.set(newDecorations, true);
         }
       }
       
@@ -324,52 +316,28 @@ export class EditorExtension {
     });
   }
 
-  // Clear highlights
-  public clearHighlights(): void {
+  public updateHighlights(messages: TextlintMessage[]): void {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (activeView) {
-      const editor = activeView.editor;
-      // @ts-ignore
-      const editorView = editor.cm as EditorView;
-      
+    if (!activeView) {
       if (this.enableDebugLog) {
-        console.log('Clearing textlint highlights');
+        console.log("No active markdown view. Skipping highlight update.");
       }
-      
-      editorView.dispatch({
-        effects: this.clearHighlightEffect.of(null)
-      });
+      return;
     }
+
+    const view = activeView.editor.cm;
+    if (!view) return;
+
+    if (this.enableDebugLog) {
+      console.log(`Dispatching update for ${messages.length} highlights.`);
+    }
+
+    // 1つのトランザクションでハイライトを更新
+    view.dispatch({
+      effects: this.updateHighlightsEffect.of(messages),
+    });
   }
 
-  // Add highlights
-  public addHighlights(messages: TextlintMessage[]): void {
-    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (activeView) {
-      const editor = activeView.editor;
-      // @ts-ignore
-      const editorView = editor.cm as EditorView;
-      
-      if (this.enableDebugLog) {
-        console.log(`Adding ${messages.length} textlint highlights to editor`);
-      }
-      
-      // 確実にハイライトを適用
-      editorView.dispatch({
-        effects: this.addHighlightEffect.of(messages)
-      });
-      
-      if (this.enableDebugLog) {
-        console.log('Highlight dispatch completed');
-      }
-    } else {
-      if (this.enableDebugLog) {
-        console.warn('No active markdown view found for adding highlights');
-      }
-    }
-  }
-
-  // Get the complete extension array
   public getExtensions() {
     return [
       this.highlightField,

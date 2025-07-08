@@ -107,33 +107,34 @@ export class AdaptiveProcessor {
     // 大きなファイルはチャンク処理
     if (strategy.chunkSize) {
       const chunks = this.createProcessingChunks(content, strategy.chunkSize);
-      const results: any[] = [];
+      const chunkData = chunks.map(chunk => ({ content: chunk, lines: chunk.split('\n').length }));
+      const results: { result: any; lines: number }[] = [];
       
-             for (let i = 0; i < chunks.length; i++) {
+             for (let i = 0; i < chunkData.length; i++) {
          try {
-           const chunkContent = chunks[i];
-           const chunkTimeout = strategy.processingTimeout / chunks.length;
+           const chunk = chunkData[i];
+           const chunkTimeout = strategy.processingTimeout / chunkData.length;
            
            const result = await new Promise<T>((resolve, reject) => {
              const timer = setTimeout(() => {
                reject(new Error(`チャンク処理がタイムアウトしました (${chunkTimeout}ms)`));
              }, chunkTimeout);
 
-             processFunction(chunkContent)
+             processFunction(chunk.content)
                .then(resolve)
                .catch(reject)
                .finally(() => clearTimeout(timer));
            });
            
-           results.push(result);
+           results.push({ result, lines: chunk.lines });
          } catch (error) {
-           console.warn(`チャンク ${i + 1}/${chunks.length} の処理でエラー:`, error);
+           console.warn(`チャンク ${i + 1}/${chunkData.length} の処理でエラー:`, error);
            // エラーが発生したチャンクはスキップして続行
          }
        }
       
       // 結果をマージ（型に応じて適切にマージ）
-      return this.mergeChunkResults(results, strategy.chunkSize) as T;
+      return this.mergeChunkResults(results) as T;
     }
     
          // チャンク処理が設定されていない場合は通常処理
@@ -149,14 +150,15 @@ export class AdaptiveProcessor {
      });
   }
 
-  private static mergeChunkResults(results: any[], chunkSize: number): any {
+  private static mergeChunkResults(results: { result: any; lines: number }[]): any {
     if (results.length === 0) return { messages: [] };
     
     // TextlintResult型と仮定してマージ
     const mergedMessages: any[] = [];
     let lineOffset = 0;
     
-    for (const result of results) {
+    for (const item of results) {
+      const { result, lines } = item;
       if (result && result.messages) {
         const adjustedMessages = result.messages.map((msg: any) => ({
           ...msg,
@@ -165,12 +167,12 @@ export class AdaptiveProcessor {
         }));
         mergedMessages.push(...adjustedMessages);
       }
-      lineOffset += chunkSize;
+      lineOffset += lines;
     }
     
     return {
       messages: mergedMessages.sort((a: any, b: any) => a.line - b.line),
-      filePath: results[0]?.filePath || ''
+      filePath: results[0]?.result?.filePath || ''
     };
   }
 } 

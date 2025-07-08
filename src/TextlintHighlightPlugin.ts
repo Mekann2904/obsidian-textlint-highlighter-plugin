@@ -41,7 +41,6 @@ export class TextlintHighlightPlugin extends Plugin {
     
     // メモリマネージャーの初期化
     this.memoryManager = MemoryManager.getInstance();
-    this.memoryManager.scheduleGarbageCollection(60000); // 1分間隔でGC促進
     
     // 設定の読み込み（軽量）
     await this.loadSettings();
@@ -246,10 +245,13 @@ export class TextlintHighlightPlugin extends Plugin {
     this.contentCache.clear();
     this.resultCache.clear();
     
-    // ルールローダーも再初期化が必要
+    // RuleLoaderのキャッシュをクリアして、ルールの再読み込みを強制する
     if (this.ruleLoader) {
-      this.ruleLoader = null; // 次回の使用時に再初期化される
+      this.ruleLoader.clearCache();
     }
+    
+    // 設定変更を即時反映
+    this.lintCurrentFileImmediately();
   }
 
   // デバウンス処理を削除（MemoryManagerの最適化されたデバウンサーを使用）
@@ -414,13 +416,8 @@ export class TextlintHighlightPlugin extends Plugin {
   }
 
   private applyResults(messages: TextlintMessage[], file: TFile) {
-    // 既存のハイライトをクリア
-    this.editorExtension.clearHighlights();
-    
-    // 新しいハイライトを追加
-    if (messages.length > 0) {
-      this.editorExtension.addHighlights(messages);
-    }
+    // 1つのトランザクションでハイライトを更新
+    this.editorExtension.updateHighlights(messages);
 
     // ビューを更新
     this.updateTextlintView(messages, file);

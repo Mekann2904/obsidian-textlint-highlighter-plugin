@@ -252,47 +252,36 @@ export class LRUCache<T> {
   }
 
   public evictLRU(count: number): void {
-    for (let i = 0; i < count && this.tail; i++) {
-      const key = this.tail.key;
-      this.remove(key);
+    for (let i = 0; i < count; i++) {
+      if (this.tail) {
+        this.remove(this.tail.key);
+      }
     }
   }
 
   private startCleanupTimer(): void {
-    this.cleanupTimer = setInterval(() => {
-      this.cleanup();
-    }, this.cleanupInterval);
+    this.cleanupTimer = setInterval(() => this.cleanup(), this.cleanupInterval);
   }
 
   private getMemoryInfo(): { heapUsed: number; heapTotal: number; external: number } {
     if (typeof process !== 'undefined' && process.memoryUsage) {
-      const usage = process.memoryUsage();
+      const mu = process.memoryUsage();
       return {
-        heapUsed: usage.heapUsed / (1024 * 1024),
-        heapTotal: usage.heapTotal / (1024 * 1024),
-        external: usage.external / (1024 * 1024)
+        heapUsed: mu.heapUsed / 1024 / 1024,
+        heapTotal: mu.heapTotal / 1024 / 1024,
+        external: mu.external / 1024 / 1024
       };
     }
-    
-    // ブラウザ環境のフォールバック
     return { heapUsed: 0, heapTotal: 0, external: 0 };
   }
 }
 
-/**
- * メモリ管理とパフォーマンス最適化を行うクラス
- */
 export class MemoryManager {
   private static instance: MemoryManager;
-  private gcTimer: NodeJS.Timeout | null = null;
   private performanceMetrics = {
-    startTime: Date.now(),
     totalOperations: 0,
-    memoryUsage: {
-      peak: 0,
-      current: 0,
-      lastGc: Date.now()
-    }
+    totalProcessingTime: 0,
+    idleTasksExecuted: 0
   };
 
   private constructor() {}
@@ -304,9 +293,6 @@ export class MemoryManager {
     return MemoryManager.instance;
   }
 
-  /**
-   * 処理を非同期にチャンク分割して実行する
-   */
   public async processInChunks<T>(
     items: T[],
     processor: (item: T) => Promise<void> | void,
@@ -315,222 +301,128 @@ export class MemoryManager {
   ): Promise<void> {
     for (let i = 0; i < items.length; i += chunkSize) {
       const chunk = items.slice(i, i + chunkSize);
-      
-      await Promise.all(chunk.map(item => processor(item)));
-      
-      // 次のチャンクまで短時間待機（UIのブロッキングを防ぐ）
-      if (i + chunkSize < items.length) {
+      await Promise.all(chunk.map(processor));
+      if (delayMs > 0) {
         await this.sleep(delayMs);
       }
     }
   }
 
-  /**
-   * requestIdleCallbackを使用してアイドル時間に処理を実行
-   */
   public runWhenIdle(callback: () => void, timeout: number = 5000): void {
-    if (typeof requestIdleCallback !== 'undefined') {
-      requestIdleCallback(
-        (deadline) => {
-          if (deadline.timeRemaining() > 0) {
-            callback();
-          } else {
-            // アイドル時間がない場合は通常のsetTimeoutで実行
-            setTimeout(callback, 0);
-          }
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(
+        () => {
+          callback();
+          this.performanceMetrics.idleTasksExecuted++;
         },
         { timeout }
       );
     } else {
-      // フォールバック
-      setTimeout(callback, 0);
+      setTimeout(() => {
+        callback();
+        this.performanceMetrics.idleTasksExecuted++;
+      }, 200); // フォールバック
     }
   }
 
-  /**
-   * デバウンス処理の最適化版
-   */
   public createOptimizedDebouncer(
     callback: () => void,
     delay: number = 300
   ): () => void {
     let timeoutId: NodeJS.Timeout | null = null;
-    let lastCallTime = 0;
-
-    return () => {
-      const now = Date.now();
-      const timeSinceLastCall = now - lastCallTime;
-
+    let lastArgs: any[] | null = null;
+    
+    return (...args: any[]) => {
+      lastArgs = args;
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
-
-      // 頻繁な呼び出しの場合は遅延を少し増やす
-      const adaptiveDelay = timeSinceLastCall < 100 ? delay * 1.5 : delay;
-
       timeoutId = setTimeout(() => {
-        lastCallTime = Date.now();
-        callback();
-        timeoutId = null;
-      }, adaptiveDelay);
+        callback.apply(null, lastArgs);
+      }, delay);
     };
   }
 
-  /**
-   * スロットリング処理（一定間隔でのみ実行）
-   */
   public createThrottler(
     callback: () => void,
     interval: number = 100
   ): () => void {
-    let lastExecution = 0;
-    let timeoutId: NodeJS.Timeout | null = null;
+    let canRun = true;
+    let queued = false;
 
     return () => {
-      const now = Date.now();
-      const timeSinceLastExecution = now - lastExecution;
-
-      if (timeSinceLastExecution >= interval) {
-        lastExecution = now;
-        callback();
-      } else if (!timeoutId) {
-        const remainingTime = interval - timeSinceLastExecution;
-        timeoutId = setTimeout(() => {
-          lastExecution = Date.now();
-          callback();
-          timeoutId = null;
-        }, remainingTime);
+      if (!canRun) {
+        queued = true;
+        return;
       }
+      
+      canRun = false;
+      callback();
+      
+      setTimeout(() => {
+        canRun = true;
+        if (queued) {
+          queued = false;
+          callback();
+        }
+      }, interval);
     };
   }
 
-  /**
-   * メモリ使用量を監視
-   */
-  public monitorMemoryUsage(): void {
-    if (typeof performance !== 'undefined' && (performance as any).memory) {
-      const memory = (performance as any).memory;
-      this.performanceMetrics.memoryUsage.current = memory.usedJSHeapSize;
-      
-      if (memory.usedJSHeapSize > this.performanceMetrics.memoryUsage.peak) {
-        this.performanceMetrics.memoryUsage.peak = memory.usedJSHeapSize;
-      }
-    }
-  }
-
-  /**
-   * 定期的なガベージコレクション促進
-   */
-  public scheduleGarbageCollection(intervalMs: number = 30000): void {
-    if (this.gcTimer) {
-      clearInterval(this.gcTimer);
-    }
-
-    this.gcTimer = setInterval(() => {
-      this.performGarbageCollection();
-    }, intervalMs);
-  }
-
-  /**
-   * ガベージコレクションの促進
-   */
-  private performGarbageCollection(): void {
-    if (typeof global !== 'undefined' && global.gc) {
-      global.gc();
-      this.performanceMetrics.memoryUsage.lastGc = Date.now();
-    }
-  }
-
-  /**
-   * バッチ処理用のキュー
-   */
   public createBatchProcessor<T>(
     processor: (items: T[]) => Promise<void> | void,
     batchSize: number = 50,
     maxWaitMs: number = 100
   ) {
-    let queue: T[] = [];
-    let timeoutId: NodeJS.Timeout | null = null;
+    let batch: T[] = [];
+    let timeout: NodeJS.Timeout | null = null;
 
     const processBatch = async () => {
-      if (queue.length === 0) return;
-
-      const batch = queue.splice(0, batchSize);
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
       }
-
-      try {
-        await processor(batch);
-      } catch (error) {
-        console.error('Batch processing error:', error);
-      }
-
-      // まだキューに項目がある場合は続行
-      if (queue.length > 0) {
-        timeoutId = setTimeout(processBatch, 1);
+      if (batch.length > 0) {
+        const currentBatch = batch;
+        batch = [];
+        await processor(currentBatch);
       }
     };
 
     return {
       add: (item: T) => {
-        queue.push(item);
-
-        if (queue.length >= batchSize) {
-          // バッチサイズに達した場合は即座に処理
+        batch.push(item);
+        if (batch.length >= batchSize) {
           processBatch();
-        } else if (!timeoutId) {
-          // 最大待機時間後に処理
-          timeoutId = setTimeout(processBatch, maxWaitMs);
+        } else if (!timeout) {
+          timeout = setTimeout(processBatch, maxWaitMs);
         }
       },
-      flush: () => processBatch(),
-      size: () => queue.length
+      flush: processBatch
     };
   }
 
-  /**
-   * sleep関数
-   */
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  /**
-   * パフォーマンス統計の取得
-   */
   public getPerformanceStats() {
-    const uptime = Date.now() - this.performanceMetrics.startTime;
-    const memoryStats = this.performanceMetrics.memoryUsage;
-
     return {
-      uptime,
       totalOperations: this.performanceMetrics.totalOperations,
-      operationsPerSecond: this.performanceMetrics.totalOperations / (uptime / 1000),
-      memory: {
-        current: memoryStats.current,
-        peak: memoryStats.peak,
-        timeSinceLastGc: Date.now() - memoryStats.lastGc
-      }
+      totalProcessingTime: this.performanceMetrics.totalProcessingTime,
+      idleTasksExecuted: this.performanceMetrics.idleTasksExecuted,
     };
   }
 
-  /**
-   * リソースのクリーンアップ
-   */
   public cleanup(): void {
-    if (this.gcTimer) {
-      clearInterval(this.gcTimer);
-      this.gcTimer = null;
-    }
+    this.performanceMetrics = {
+      totalOperations: 0,
+      totalProcessingTime: 0,
+      idleTasksExecuted: 0
+    };
   }
 
-  /**
-   * 操作カウンターのインクリメント
-   */
   public incrementOperationCount(): void {
     this.performanceMetrics.totalOperations++;
-    this.monitorMemoryUsage();
   }
 } 
