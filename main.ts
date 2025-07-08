@@ -3,6 +3,28 @@ import { TextlintKernel } from '@textlint/kernel';
 import { StateField, StateEffect, RangeSet, Range } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, hoverTooltip } from '@codemirror/view';
 
+// Textlintモジュールの静的インポート
+// @ts-ignore
+const pluginMarkdown = require('@textlint/textlint-plugin-markdown').default || require('@textlint/textlint-plugin-markdown');
+// @ts-ignore
+const presetJaTechnicalWriting = require('textlint-rule-preset-ja-technical-writing').default || require('textlint-rule-preset-ja-technical-writing');
+// @ts-ignore
+const presetJaSpacing = require('textlint-rule-preset-ja-spacing').default || require('textlint-rule-preset-ja-spacing');
+// @ts-ignore
+const presetAiWriting = require('@textlint-ja/textlint-rule-preset-ai-writing').default || require('@textlint-ja/textlint-rule-preset-ai-writing');
+// @ts-ignore
+const presetJtfStyle = require('textlint-rule-preset-jtf-style').default || require('textlint-rule-preset-jtf-style');
+// @ts-ignore
+const ruleNoDroppingI = require('@textlint-ja/textlint-rule-no-dropping-i').default || require('@textlint-ja/textlint-rule-no-dropping-i');
+// @ts-ignore
+const ruleNoInsertDroppingSa = require('@textlint-ja/textlint-rule-no-insert-dropping-sa').default || require('@textlint-ja/textlint-rule-no-insert-dropping-sa');
+// @ts-ignore
+const ruleNoDoubledJoshi = require('textlint-rule-no-doubled-joshi').default || require('textlint-rule-no-doubled-joshi');
+// @ts-ignore
+const ruleNoMixedZenkakuAndHankakuAlphabet = require('textlint-rule-no-mixed-zenkaku-and-hankaku-alphabet').default || require('textlint-rule-no-mixed-zenkaku-and-hankaku-alphabet');
+// @ts-ignore
+const rulePreferTariTari = require('textlint-rule-prefer-tari-tari').default || require('textlint-rule-prefer-tari-tari');
+
 export const VIEW_TYPE_TEXTLINT = "textlint-view";
 
 // シンプルな設定インターフェース
@@ -738,7 +760,7 @@ export default class TextlintHighlightPlugin extends Plugin {
         plugins: [
           {
             pluginId: '@textlint/textlint-plugin-markdown',
-            plugin: require('@textlint/textlint-plugin-markdown').default || require('@textlint/textlint-plugin-markdown'),
+            plugin: pluginMarkdown,
             options: true
           }
         ],
@@ -815,7 +837,7 @@ export default class TextlintHighlightPlugin extends Plugin {
     // 技術文書向けプリセット
     if (this.settings.useTechnicalWritingPreset) {
       try {
-        const preset = require("textlint-rule-preset-ja-technical-writing");
+        const preset = presetJaTechnicalWriting;
         if (preset && preset.rules) {
           Object.entries(preset.rules).forEach(([ruleId, rule]) => {
             let actualRule = rule;
@@ -853,7 +875,7 @@ export default class TextlintHighlightPlugin extends Plugin {
     // スペース・句読点プリセット
     if (this.settings.useSpacingPreset) {
       try {
-        const preset = require("textlint-rule-preset-ja-spacing");
+        const preset = presetJaSpacing;
         if (preset && preset.rules) {
           Object.entries(preset.rules).forEach(([ruleId, rule]) => {
             let actualRule = rule;
@@ -900,7 +922,7 @@ export default class TextlintHighlightPlugin extends Plugin {
     // AI文章向けプリセット
     if (this.settings.useCustomRules) {
       try {
-        const aiPreset = require("@textlint-ja/textlint-rule-preset-ai-writing");
+        const aiPreset = presetAiWriting;
         
         // プリセットの構造を確認
         if (this.settings.enableDebugLog) {
@@ -909,7 +931,7 @@ export default class TextlintHighlightPlugin extends Plugin {
         }
         
         // プリセットの正しい構造にアクセス
-        const preset = aiPreset.default || aiPreset;
+        const preset = aiPreset;
         const presetRules = preset.rules || {};
         const presetRulesConfig = preset.rulesConfig || {};
         
@@ -989,7 +1011,7 @@ export default class TextlintHighlightPlugin extends Plugin {
     // JTFスタイルガイドプリセット
     if (this.settings.useJtfStylePreset) {
       try {
-        const jtfPreset = require("textlint-rule-preset-jtf-style");
+        const jtfPreset = presetJtfStyle;
         
         if (this.settings.enableDebugLog) {
           console.log('JTF style preset structure:', Object.keys(jtfPreset));
@@ -997,7 +1019,7 @@ export default class TextlintHighlightPlugin extends Plugin {
         }
         
         // プリセットの正しい構造にアクセス
-        const preset = jtfPreset.default || jtfPreset;
+        const preset = jtfPreset;
         const presetRules = preset.rules || {};
         const presetRulesConfig = preset.rulesConfig || {};
         
@@ -1078,26 +1100,31 @@ export default class TextlintHighlightPlugin extends Plugin {
     const individualRules = [
       { 
         name: '@textlint-ja/textlint-rule-no-dropping-i',
+        module: ruleNoDroppingI,
         setting: this.settings.useNoDroppingI,
         description: 'い抜き言葉'
       },
       { 
         name: '@textlint-ja/textlint-rule-no-insert-dropping-sa',
+        module: ruleNoInsertDroppingSa,
         setting: this.settings.useNoInsertDroppingSa,
         description: 'さ入れ言葉'
       },
       { 
         name: 'no-doubled-joshi',
+        module: ruleNoDoubledJoshi,
         setting: this.settings.useNoDoubledJoshi,
         description: '助詞の重複'
       },
       { 
         name: 'no-mixed-zenkaku-and-hankaku-alphabet',
+        module: ruleNoMixedZenkakuAndHankakuAlphabet,
         setting: this.settings.useNoMixedZenkakuHankakuAlphabet,
         description: '全角半角英字混在'
       },
       { 
         name: 'prefer-tari-tari',
+        module: rulePreferTariTari,
         setting: this.settings.usePreferTariTari,
         description: 'たりたり表現'
       }
@@ -1112,16 +1139,20 @@ export default class TextlintHighlightPlugin extends Plugin {
       }
 
       try {
-        let ruleModule: any;
-        if (ruleInfo.name.startsWith('textlint-rule-')) {
-          ruleModule = require(ruleInfo.name);
-        } else if (ruleInfo.name.startsWith('@textlint-ja/')) {
-          ruleModule = require(ruleInfo.name);
-        } else {
-          ruleModule = require(`textlint-rule-${ruleInfo.name}`);
-        }
+        const ruleModule = ruleInfo.module;
 
         if (ruleModule) {
+          if (this.settings.enableDebugLog) {
+            console.log(`Processing rule ${ruleInfo.name}:`, {
+              type: typeof ruleModule,
+              hasDefault: 'default' in ruleModule,
+              defaultType: typeof ruleModule.default,
+              hasLinter: 'linter' in ruleModule,
+              linterType: typeof ruleModule.linter,
+              isFunction: typeof ruleModule === 'function'
+            });
+          }
+          
           // 個別ルール形式の場合
           let actualRule = ruleModule;
           
@@ -1130,11 +1161,22 @@ export default class TextlintHighlightPlugin extends Plugin {
             if (ruleModule && typeof ruleModule === 'object') {
               if (ruleModule.default && typeof ruleModule.default === 'function') {
                 actualRule = ruleModule.default;
+                if (this.settings.enableDebugLog) {
+                  console.log(`Using default export for ${ruleInfo.name}`);
+                }
               } else if (ruleModule.linter && typeof ruleModule.linter === 'function') {
                 actualRule = ruleModule.linter;
+                if (this.settings.enableDebugLog) {
+                  console.log(`Using linter property for ${ruleInfo.name}`);
+                }
               } else {
                 if (this.settings.enableDebugLog) {
-                  console.warn(`Rule ${ruleInfo.name} is not a valid function:`, typeof ruleModule, ruleModule);
+                  console.warn(`Rule ${ruleInfo.name} is not a valid function:`, {
+                    type: typeof ruleModule,
+                    hasDefault: 'default' in ruleModule,
+                    defaultType: typeof ruleModule.default,
+                    keys: Object.keys(ruleModule)
+                  });
                 }
                 continue;
               }
