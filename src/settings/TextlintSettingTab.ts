@@ -35,7 +35,7 @@ export class TextlintSettingTab extends PluginSettingTab {
       attr: { style: 'margin-bottom: 8px;' }
     });
     descEl.createEl('p', { 
-      text: '推奨設定: 「技術文書向けプリセット」と「スペース・句読点プリセット」を有効にしてください。',
+      text: '推奨設定: 「textlint-rule-preset-ja-technical-writing」と「textlint-rule-preset-ja-spacing」を有効にしてください。',
       attr: { style: 'margin: 0; font-weight: 500;' }
     });
   }
@@ -55,25 +55,25 @@ export class TextlintSettingTab extends PluginSettingTab {
 
     const presets = [
       {
-        name: '技術文書向けプリセット',
+        name: 'textlint-rule-preset-ja-technical-writing',
         desc: '文章の長さ、文体統一、冗長表現をチェック（推奨）',
         setting: 'useTechnicalWritingPreset',
         recommended: true
       },
       {
-        name: 'スペース・句読点プリセット',
+        name: 'textlint-rule-preset-ja-spacing',
         desc: '全角半角スペース、句読点の使い方をチェック（推奨）',
         setting: 'useSpacingPreset',
         recommended: true
       },
       {
-        name: 'AI文章向けプリセット',
+        name: '@textlint-ja/textlint-rule-preset-ai-writing',
         desc: 'AI生成文章の不自然な表現をチェック',
         setting: 'useCustomRules',
         recommended: false
       },
       {
-        name: 'JTFスタイルガイドプリセット',
+        name: 'textlint-rule-preset-jtf-style',
         desc: '翻訳品質向上のための専門的なスタイルチェック',
         setting: 'useJtfStylePreset',
         recommended: false
@@ -118,29 +118,54 @@ export class TextlintSettingTab extends PluginSettingTab {
 
     const rules = [
       {
-        name: 'い抜き言葉の検出',
+        name: '@textlint-ja/textlint-rule-no-dropping-i',
         desc: '「見れる」→「見られる」など、正しい助動詞の使用をチェック',
         setting: 'useNoDroppingI'
       },
       {
-        name: 'さ入れ言葉の検出',
+        name: '@textlint-ja/textlint-rule-no-insert-dropping-sa',
         desc: '「食べれない」→「食べられない」など、正しい可能表現をチェック',
         setting: 'useNoInsertDroppingSa'
       },
       {
-        name: '助詞の重複検出',
+        name: 'textlint-rule-no-doubled-joshi',
         desc: '「材料不足で代替素材で」など、助詞の重複をチェック',
         setting: 'useNoDoubledJoshi'
       },
       {
-        name: '全角半角英字混在の検出',
+        name: 'textlint-rule-no-mixed-zenkaku-and-hankaku-alphabet',
         desc: 'アルファベットの表記統一をチェック',
         setting: 'useNoMixedZenkakuHankakuAlphabet'
       },
       {
-        name: 'たりたり表現の推奨',
+        name: 'textlint-rule-prefer-tari-tari',
         desc: '「歩いたり、走る」→「歩いたり、走ったり」など、並列表現をチェック',
         setting: 'usePreferTariTari'
+      },
+      {
+        name: 'textlint-rule-write-good',
+        desc: '英語文章の品質チェック（受動態、冗長表現、語彙選択など）',
+        setting: 'useWriteGood'
+      },
+      {
+        name: 'textlint-rule-ja-no-orthographic-variants',
+        desc: '日本語表記ゆれチェック（「組立」「組み立て」など同じ意味の異なる表記）',
+        setting: 'useJaNoOrthographicVariants'
+      },
+      {
+        name: 'textlint-rule-no-mix-dearu-desumasu',
+        desc: '敬体（ですます調）と常体（である調）の混在チェック',
+        setting: 'useNoMixDearuDesumasu'
+      },
+      {
+        name: 'textlint-rule-no-start-duplicated-conjunction',
+        desc: '文頭接続詞の重複チェック（"However", "But"など短い間隔での重複）',
+        setting: 'useNoStartDuplicatedConjunction'
+      },
+      {
+        name: 'textlint-rule-date-weekday-mismatch',
+        desc: '日付と曜日の不一致チェック（「2016-12-29(金曜日)」→「2016-12-29(木曜日)」など）',
+        setting: 'useDateWeekdayMismatch'
       }
     ];
 

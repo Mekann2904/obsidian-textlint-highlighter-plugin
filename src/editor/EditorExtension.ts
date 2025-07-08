@@ -68,22 +68,95 @@ export class EditorExtension {
 
   private createSingleDecoration(message: TextlintMessage, editor: any) {
     try {
-      const from = editor.posToOffset({ line: message.line - 1, ch: message.column - 1 });
-      let to = from + 5;
+      const lineCount = editor.lineCount();
+      const targetLine = message.line - 1;
+      
+      // 行数チェック
+      if (targetLine < 0 || targetLine >= lineCount) {
+        if (this.enableDebugLog) {
+          console.warn(`Line ${message.line} is out of range (total: ${lineCount})`);
+        }
+        return null;
+      }
 
+      const lineText = editor.getLine(targetLine);
+      if (!lineText) {
+        if (this.enableDebugLog) {
+          console.warn(`Could not get text for line ${message.line}`);
+        }
+        return null;
+      }
+
+      const targetColumn = Math.max(0, Math.min(message.column - 1, lineText.length - 1));
+      
+      // 安全な位置計算
+      let from: number;
+      let to: number;
+      
+      try {
+        from = editor.posToOffset({ line: targetLine, ch: targetColumn });
+      } catch (posError) {
+        if (this.enableDebugLog) {
+          console.warn(`posToOffset failed for line ${targetLine}, column ${targetColumn}:`, posError);
+        }
+        return null;
+      }
+
+      // 終了位置の計算
       if (message.endLine && message.endColumn) {
-        to = editor.posToOffset({ line: message.endLine - 1, ch: message.endColumn - 1 });
+        const endLine = message.endLine - 1;
+        const endColumn = Math.max(0, message.endColumn - 1);
+        
+        if (endLine >= 0 && endLine < lineCount) {
+          const endLineText = editor.getLine(endLine);
+          if (endLineText && endColumn <= endLineText.length) {
+            try {
+              to = editor.posToOffset({ line: endLine, ch: endColumn });
+            } catch (endPosError) {
+              to = from + 1; // フォールバック
+            }
+          } else {
+            to = from + 1; // フォールバック
+          }
+        } else {
+          to = from + 1; // フォールバック
+        }
       } else {
-        // Smart word boundary detection
-        const lineText = editor.getLine(message.line - 1);
-        const startIndex = message.column - 1;
-        let endIndex = this.findWordEnd(lineText, startIndex);
-        to = editor.posToOffset({ line: message.line - 1, ch: Math.max(endIndex, startIndex + 1) });
+        // スマートな単語境界検出
+        const startIndex = targetColumn;
+        const wordEnd = this.findWordEnd(lineText, startIndex);
+        
+        if (wordEnd > startIndex) {
+          try {
+            to = editor.posToOffset({ line: targetLine, ch: Math.min(wordEnd, lineText.length) });
+          } catch (wordPosError) {
+            to = from + 1; // フォールバック
+          }
+        } else {
+          to = from + 1; // 最低限1文字
+        }
       }
       
+      // 最終的な範囲検証と修正
       if (from >= to) {
+        to = from + 1;
+        
+        // ドキュメント全体の長さを超えないようにチェック
+        const totalLength = editor.getValue().length;
+        if (to > totalLength) {
+          if (from > 0) {
+            from = from - 1;
+            to = from + 1;
+          } else {
+            return null; // 完全に無効な状況
+          }
+        }
+      }
+
+      // 最終チェック
+      if (from < 0 || to <= from) {
         if (this.enableDebugLog) {
-          console.warn(`Invalid range for highlight: from=${from}, to=${to}`, message);
+          console.warn(`Still invalid range: from=${from}, to=${to}`, message);
         }
         return null;
       }
@@ -98,7 +171,7 @@ export class EditorExtension {
 
     } catch (e) {
       if (this.enableDebugLog) {
-        console.error("Failed to create single decoration", e);
+        console.error("Failed to create single decoration:", e, message);
       }
       return null;
     }

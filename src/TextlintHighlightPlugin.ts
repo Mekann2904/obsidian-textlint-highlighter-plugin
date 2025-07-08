@@ -33,13 +33,13 @@ export class TextlintHighlightPlugin extends Plugin {
   };
 
   async onload() {
-    console.log('Textlint Highlighter Plugin: 最適化版を読み込み中...');
+    console.log('Textlint Highlighter Plugin: 高速読み込み開始...');
     
-    // 設定の読み込み
+    // 設定の読み込み（軽量）
     await this.loadSettings();
     
-    // 依存関係の初期化
-    await this.initializeDependencies();
+    // 軽量な依存関係の初期化のみ
+    this.initializeBasicDependencies();
     
     // UI コンポーネントの設定
     this.setupUI();
@@ -47,7 +47,7 @@ export class TextlintHighlightPlugin extends Plugin {
     // イベントリスナーの設定
     this.setupEventListeners();
     
-    console.log('Textlint Highlighter Plugin: 読み込み完了');
+    console.log('Textlint Highlighter Plugin: 高速読み込み完了');
   }
 
   onunload() {
@@ -55,14 +55,8 @@ export class TextlintHighlightPlugin extends Plugin {
     this.cleanup();
   }
 
-  private async initializeDependencies() {
-    // TextlintKernelの初期化
-    this.kernel = new TextlintKernel();
-    
-    // RuleLoaderの初期化（シングルトン）
-    this.ruleLoader = RuleLoader.getInstance();
-    this.ruleLoader.setDebugMode(this.settings.enableDebugLog);
-    
+  private initializeBasicDependencies() {
+    // 軽量な初期化のみ（同期処理）
     // キャッシュの初期化
     this.contentCache = new Cache<string>(5 * 60 * 1000); // 5分
     this.resultCache = new Cache<TextlintMessage[]>(10 * 60 * 1000); // 10分
@@ -70,6 +64,18 @@ export class TextlintHighlightPlugin extends Plugin {
     // エディタ拡張の初期化
     this.editorExtension = new EditorExtension(this.app);
     this.editorExtension.setDebugMode(this.settings.enableDebugLog);
+  }
+
+  private async initializeHeavyDependencies() {
+    // 重い処理は実際に必要になってから初期化
+    if (!this.kernel) {
+      this.kernel = new TextlintKernel();
+    }
+    
+    if (!this.ruleLoader) {
+      this.ruleLoader = RuleLoader.getInstance();
+      this.ruleLoader.setDebugMode(this.settings.enableDebugLog);
+    }
     
     // Kuromoji辞書パスの設定
     this.setupKuromojiDictPath();
@@ -90,12 +96,15 @@ export class TextlintHighlightPlugin extends Plugin {
   }
 
   private setupEventListeners() {
-    // レイアウト準備完了時
+    // レイアウト準備完了時（軽量化）
     this.app.workspace.onLayoutReady(async () => {
       if (this.settings.enableDebugLog) {
-        console.log('Workspace layout ready, running initial lint');
+        console.log('Workspace layout ready, deferring initial lint');
       }
-      this.debouncedLintCurrentFile();
+      // 初期lintを遅延実行（パフォーマンス改善）
+      setTimeout(() => {
+        this.debouncedLintCurrentFile();
+      }, 1000); // 1秒遅延してUX改善
     });
 
     // アクティブなリーフ変更時（新しいメモを開いた時）
@@ -207,12 +216,12 @@ export class TextlintHighlightPlugin extends Plugin {
       }
     });
 
-    // 定期的なチェック（バックアップとして5秒に短縮）
+    // 定期的なチェック（軽量化：15秒間隔）
     this.registerInterval(window.setInterval(() => {
       if (this.app.workspace.getActiveViewOfType(MarkdownView)) {
         this.debouncedLintCurrentFile();
       }
-    }, 5000));
+    }, 15000)); // パフォーマンス改善のため15秒に延長
   }
 
   private cleanup() {
@@ -277,7 +286,7 @@ export class TextlintHighlightPlugin extends Plugin {
     this.performanceStats.totalRequests++;
     
     if (this.settings.enableDebugLog) {
-      console.log('=== Textlint Debug: 最適化版lint開始 ===');
+      console.log('=== Textlint Debug: 高速lint開始 ===');
     }
     
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -297,6 +306,8 @@ export class TextlintHighlightPlugin extends Plugin {
     }
 
     try {
+      // 重い依存関係を必要に応じて初期化
+      await this.initializeHeavyDependencies();
       const content = await this.app.vault.read(file);
       const contentHash = await generateContentHash(content);
       
@@ -400,46 +411,57 @@ export class TextlintHighlightPlugin extends Plugin {
       
       if (views.length === 0) {
         if (this.settings.enableDebugLog) {
-          console.log('TextlintView not found, skipping update');
+          console.log('TextlintView not found, creating new view');
         }
+        // ビューが存在しない場合は作成
+        this.recreateTextlintView(messages, file);
         return;
       }
 
-      const view = views[0].view as any;
+      const leaf = views[0];
+      const view = leaf.view;
       
-      // より厳密な型チェック
-      if (view && typeof view.updateMessages === 'function') {
-        (view as TextlintView).updateMessages(messages, file);
+      // より柔軟な型チェック
+      if (view && view.getViewType() === VIEW_TYPE_TEXTLINT && 'updateMessages' in view) {
+        try {
+          (view as any).updateMessages(messages, file);
+          if (this.settings.enableDebugLog) {
+            console.log(`TextlintView updated with ${messages.length} messages`);
+          }
+        } catch (updateError) {
+          console.error('Error calling updateMessages:', updateError);
+          this.recreateTextlintView(messages, file);
+        }
       } else {
         if (this.settings.enableDebugLog) {
-          console.warn('TextlintView updateMessages method not found:', {
-            viewExists: !!view,
-            viewType: typeof view,
-            hasUpdateMessages: view && typeof view.updateMessages === 'function',
-            viewConstructor: view?.constructor?.name
-          });
+          console.warn('TextlintView is not properly initialized, recreating...');
         }
-        
-        // ビューを再作成を試みる
         this.recreateTextlintView(messages, file);
       }
     } catch (error) {
-      console.error('Error updating TextlintView:', error);
-      if (this.settings.enableDebugLog) {
-        console.error('TextlintView update error details:', error);
+      console.error('Error in updateTextlintView:', error);
+      // エラーが発生した場合でも処理を続行
+      try {
+        this.recreateTextlintView(messages, file);
+      } catch (recreateError) {
+        console.error('Failed to recreate view:', recreateError);
       }
     }
   }
 
   private async recreateTextlintView(messages: TextlintMessage[], file: TFile) {
     try {
+      if (this.settings.enableDebugLog) {
+        console.log('Recreating TextlintView...');
+      }
+
       // 既存のビューを閉じる
       const existingViews = this.app.workspace.getLeavesOfType(VIEW_TYPE_TEXTLINT);
       for (const leaf of existingViews) {
         leaf.detach();
       }
 
-      // 新しいビューを作成
+      // 右サイドバーにビューを作成
       const leaf = this.app.workspace.getRightLeaf(false);
       if (leaf) {
         await leaf.setViewState({
@@ -447,13 +469,42 @@ export class TextlintHighlightPlugin extends Plugin {
           active: false,
         });
 
-        // 少し待ってからメッセージを更新
-        setTimeout(() => {
-          const view = leaf.view as any;
-          if (view && typeof view.updateMessages === 'function') {
-            (view as TextlintView).updateMessages(messages, file);
+        // ビューの初期化を待つ
+        const maxRetries = 10;
+        let retries = 0;
+        
+        const attemptUpdate = () => {
+          const view = leaf.view;
+          if (view && view.getViewType() === VIEW_TYPE_TEXTLINT && 'updateMessages' in view) {
+            try {
+              (view as any).updateMessages(messages, file);
+              if (this.settings.enableDebugLog) {
+                console.log('TextlintView successfully recreated and updated');
+              }
+              return true;
+            } catch (error) {
+              console.error('Error updating recreated view:', error);
+              return false;
+            }
           }
-        }, 100);
+          return false;
+        };
+
+        // 即座に試行
+        if (attemptUpdate()) {
+          return;
+        }
+
+        // リトライ機構
+        const retryInterval = setInterval(() => {
+          retries++;
+          if (attemptUpdate() || retries >= maxRetries) {
+            clearInterval(retryInterval);
+            if (retries >= maxRetries && this.settings.enableDebugLog) {
+              console.warn('Failed to update TextlintView after recreation');
+            }
+          }
+        }, 50); // 50ms間隔でリトライ
       }
     } catch (error) {
       console.error('Failed to recreate TextlintView:', error);

@@ -22,6 +22,16 @@ const ruleNoDoubledJoshi = require('textlint-rule-no-doubled-joshi').default || 
 const ruleNoMixedZenkakuAndHankakuAlphabet = require('textlint-rule-no-mixed-zenkaku-and-hankaku-alphabet').default || require('textlint-rule-no-mixed-zenkaku-and-hankaku-alphabet');
 // @ts-ignore
 const rulePreferTariTari = require('textlint-rule-prefer-tari-tari').default || require('textlint-rule-prefer-tari-tari');
+// @ts-ignore
+const ruleWriteGood = require('textlint-rule-write-good').default || require('textlint-rule-write-good');
+// @ts-ignore
+const ruleJaNoOrthographicVariants = require('textlint-rule-ja-no-orthographic-variants').default || require('textlint-rule-ja-no-orthographic-variants');
+// @ts-ignore
+const ruleNoMixDearuDesumasu = require('textlint-rule-no-mix-dearu-desumasu').default || require('textlint-rule-no-mix-dearu-desumasu');
+// @ts-ignore
+const ruleNoStartDuplicatedConjunction = require('textlint-rule-no-start-duplicated-conjunction').default || require('textlint-rule-no-start-duplicated-conjunction');
+// @ts-ignore
+const ruleDateWeekdayMismatch = require('textlint-rule-date-weekday-mismatch').default || require('textlint-rule-date-weekday-mismatch');
 
 export class RuleLoader {
   private static instance: RuleLoader;
@@ -273,6 +283,36 @@ export class RuleLoader {
         module: rulePreferTariTari,
         setting: settings.usePreferTariTari,
         description: 'たりたり表現'
+      },
+      { 
+        name: 'write-good',
+        module: ruleWriteGood,
+        setting: settings.useWriteGood,
+        description: '英語ライティング品質'
+      },
+      { 
+        name: 'ja-no-orthographic-variants',
+        module: ruleJaNoOrthographicVariants,
+        setting: settings.useJaNoOrthographicVariants,
+        description: '日本語表記ゆれ'
+      },
+      { 
+        name: 'no-mix-dearu-desumasu',
+        module: ruleNoMixDearuDesumasu,
+        setting: settings.useNoMixDearuDesumasu,
+        description: 'である調・ですます調混在'
+      },
+      { 
+        name: 'no-start-duplicated-conjunction',
+        module: ruleNoStartDuplicatedConjunction,
+        setting: settings.useNoStartDuplicatedConjunction,
+        description: '文頭接続詞重複'
+      },
+      { 
+        name: 'date-weekday-mismatch',
+        module: ruleDateWeekdayMismatch,
+        setting: settings.useDateWeekdayMismatch,
+        description: '日付曜日不一致'
       }
     ];
 
@@ -344,7 +384,12 @@ export class RuleLoader {
       settings.useNoInsertDroppingSa ? 'dropsa' : '',
       settings.useNoDoubledJoshi ? 'joshi' : '',
       settings.useNoMixedZenkakuHankakuAlphabet ? 'alpha' : '',
-      settings.usePreferTariTari ? 'tari' : ''
+      settings.usePreferTariTari ? 'tari' : '',
+      settings.useWriteGood ? 'writegood' : '',
+      settings.useJaNoOrthographicVariants ? 'orthographic' : '',
+      settings.useNoMixDearuDesumasu ? 'mixstyle' : '',
+      settings.useNoStartDuplicatedConjunction ? 'conjunction' : '',
+      settings.useDateWeekdayMismatch ? 'dateweekday' : ''
     ].filter(Boolean);
     
     return keyParts.join('_') || 'empty';

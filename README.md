@@ -16,14 +16,14 @@ Obsidianで動作するtextlintプラグインです。リアルタイムで文�
 
 | プリセット | 内容 | 対応状況 |
 |-----------|------|----------|
-| **技術文書向けプリセット** | 文の長さ、文体統一、表記統一など | 対応済み |
-| **スペース・句読点プリセット** | 全角・半角スペース、句読点の統一 | 対応済み |
-| **JTFスタイルガイドプリセット** | 日本翻訳連盟の品質基準に基づく校正 | 対応済み |
-| **AI文章向けプリセット** | AI生成文章特有の不自然な表現を検出 | 対応済み |
+| **textlint-rule-preset-ja-technical-writing** | 文の長さ、文体統一、表記統一など | 対応済み |
+| **textlint-rule-preset-ja-spacing** | 全角・半角スペース、句読点の統一 | 対応済み |
+| **textlint-rule-preset-jtf-style** | 日本翻訳連盟の品質基準に基づく校正 | 対応済み |
+| **@textlint-ja/textlint-rule-preset-ai-writing** | AI生成文章特有の不自然な表現を検出 | 対応済み |
 
 ### 検出可能な問題
 
-#### 技術文書向けプリセット
+#### textlint-rule-preset-ja-technical-writing
 - 一文の長さ制限
 - 漢数字と算用数字の混在チェック
 - 感嘆符・疑問符の使用チェック
@@ -31,18 +31,18 @@ Obsidianで動作するtextlintプラグインです。リアルタイムで文�
 - 冗長表現の検出
 - 不適切な助詞の使用
 
-#### スペース・句読点プリセット  
+#### textlint-rule-preset-ja-spacing  
 - 全角・半角文字間のスペース調整
 - 英数字前後のスペース統一
 - 句読点の統一
 
-#### JTFスタイルガイドプリセット
+#### textlint-rule-preset-jtf-style
 - 日本翻訳連盟の品質基準チェック
 - ひらがな・カタカナの適切な使い分け
 - 語句の統一性チェック
 - 翻訳品質の向上
 
-#### AI文章向けプリセット
+#### @textlint-ja/textlint-rule-preset-ai-writing
 - AI特有の冗長表現の検出
 - 不自然な接続詞の使用
 - 決まり文句の検出
@@ -78,19 +78,19 @@ npm run build
 設定画面（設定 > コミュニティプラグイン > Textlint Highlighter > 設定）で以下を調整できます：
 
 ### プリセット設定
-- **技術文書向けプリセット**: 技術的な文書のスタイルチェック
-- **スペース・句読点プリセット**: 記号・スペースの使い方
-- **JTFスタイルガイドプリセット**: 日本翻訳連盟の品質基準に基づく校正
-- **AI文章向けプリセット**: AI生成文章特有の問題の検出
+- **textlint-rule-preset-ja-technical-writing**: 技術的な文書のスタイルチェック
+- **textlint-rule-preset-ja-spacing**: 記号・スペースの使い方
+- **textlint-rule-preset-jtf-style**: 日本翻訳連盟の品質基準に基づく校正
+- **@textlint-ja/textlint-rule-preset-ai-writing**: AI生成文章特有の問題の検出
 
 ### 個別ルール設定
 各ルールを個別にON/OFFできます：
 
-- **い抜き言葉の検出**: 「見てる」→「見ている」の修正提案
-- **さ入れ言葉の検出**: 「食べれない」→「食べられない」の修正提案
-- **助詞の重複検出**: 「材料不足で代替素材で」の重複助詞チェック
-- **全角半角英字混在の検出**: アルファベットの表記統一チェック
-- **たりたり表現の推奨**: 並立助詞「たり」の適切な使用チェック
+- **@textlint-ja/textlint-rule-no-dropping-i**: 「見てる」→「見ている」の修正提案
+- **@textlint-ja/textlint-rule-no-insert-dropping-sa**: 「食べれない」→「食べられない」の修正提案
+- **textlint-rule-no-doubled-joshi**: 「材料不足で代替素材で」の重複助詞チェック
+- **textlint-rule-no-mixed-zenkaku-and-hankaku-alphabet**: アルファベットの表記統一チェック
+- **textlint-rule-prefer-tari-tari**: 並立助詞「たり」の適切な使用チェック
 
 ### システム設定
 - **Kuromoji使用**: 日本語形態素解析エンジンの利用（高度な解析）

@@ -11,6 +11,11 @@ export interface TextlintPluginSettings {
   useNoDoubledJoshi: boolean;
   useNoMixedZenkakuHankakuAlphabet: boolean;
   usePreferTariTari: boolean;
+  useWriteGood: boolean;
+  useJaNoOrthographicVariants: boolean;
+  useNoMixDearuDesumasu: boolean;
+  useNoStartDuplicatedConjunction: boolean;
+  useDateWeekdayMismatch: boolean;
 }
 
 export const DEFAULT_SETTINGS: TextlintPluginSettings = {
@@ -24,7 +29,12 @@ export const DEFAULT_SETTINGS: TextlintPluginSettings = {
   useNoInsertDroppingSa: true,
   useNoDoubledJoshi: true,
   useNoMixedZenkakuHankakuAlphabet: true,
-  usePreferTariTari: true
+  usePreferTariTari: true,
+  useWriteGood: true,
+  useJaNoOrthographicVariants: true,
+  useNoMixDearuDesumasu: true,
+  useNoStartDuplicatedConjunction: true,
+  useDateWeekdayMismatch: true
 };
 
 export interface TextlintMessage {
