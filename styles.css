@@ -317,43 +317,54 @@ If your plugin does not need CSS, delete this file.
   transform: translateY(0);
 }
 
-/* Textlint エラーハイライト（エディタ内） - Obsidian CSS変数使用 */
+/* Textlint エラーハイライト（エディタ内） - 確実に動作するスタイル */
 .textlint-highlight {
-  background-color: rgba(var(--color-accent-rgb), 0.1) !important;
-  border-bottom: 2px solid var(--color-accent) !important;
+  background-color: rgba(255, 165, 0, 0.1) !important;
+  border-bottom: 2px solid #ff9500 !important;
   border-radius: 2px !important;
   position: relative !important;
   cursor: help !important;
 }
 
 .textlint-highlight:hover {
-  background-color: rgba(var(--color-accent-rgb), 0.2) !important;
-  border-bottom-color: var(--color-accent) !important;
+  background-color: rgba(255, 165, 0, 0.2) !important;
+  border-bottom-color: #ff6600 !important;
 }
 
-/* エラーの種類別スタイリング - Obsidian変数使用 */
+/* エラーの種類別スタイリング - 確実に動作する色指定 */
 .textlint-severity-1 {
-  /* Warning - 警告色 */
-  background-color: rgba(var(--color-yellow-rgb), 0.1) !important;
-  border-bottom-color: var(--color-yellow) !important;
+  /* Warning - 警告色（黄色） */
+  background-color: rgba(255, 255, 0, 0.1) !important;
+  border-bottom: 2px solid #ffcc00 !important;
 }
 
 .textlint-severity-2 {
-  /* Error - エラー色 */
-  background-color: rgba(var(--color-red-rgb), 0.1) !important;
-  border-bottom-color: var(--color-red) !important;
+  /* Error - エラー色（赤色） */
+  background-color: rgba(255, 0, 0, 0.1) !important;
+  border-bottom: 2px solid #ff0000 !important;
 }
 
-/* Obsidianのシンタックスハイライトと調和 */
+/* CodeMirror 6でのハイライト表示（Obsidianエディタ対応） */
 .cm-editor .cm-line .textlint-highlight {
   background: linear-gradient(
     to bottom,
     transparent 0%,
     transparent 85%,
-    var(--text-warning) 85%,
-    var(--text-warning) 100%
+    #ffcc00 85%,
+    #ffcc00 100%
   ) !important;
-  border-bottom: none !important;
+  border-bottom: 2px solid #ffcc00 !important;
+}
+
+.cm-editor .cm-line .textlint-severity-1 {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 85%,
+    #ffcc00 85%,
+    #ffcc00 100%
+  ) !important;
+  border-bottom: 2px solid #ffcc00 !important;
 }
 
 .cm-editor .cm-line .textlint-severity-2 {
@@ -361,9 +372,10 @@ If your plugin does not need CSS, delete this file.
     to bottom,
     transparent 0%,
     transparent 85%,
-    var(--text-error) 85%,
-    var(--text-error) 100%
+    #ff0000 85%,
+    #ff0000 100%
   ) !important;
+  border-bottom: 2px solid #ff0000 !important;
 }
 
 /* Textlint Highlighter Plugin - 最適化版スタイル */
