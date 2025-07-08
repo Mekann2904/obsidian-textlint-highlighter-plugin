@@ -1,7 +1,7 @@
 import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, ItemView, editorLivePreviewField } from 'obsidian';
 import { TextlintKernel } from '@textlint/kernel';
 import { StateField, StateEffect, RangeSet, Range } from '@codemirror/state';
-import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
+import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, hoverTooltip } from '@codemirror/view';
 
 export const VIEW_TYPE_TEXTLINT = "textlint-view";
 
@@ -9,17 +9,31 @@ export const VIEW_TYPE_TEXTLINT = "textlint-view";
 interface TextlintPluginSettings {
   useTechnicalWritingPreset: boolean;
   useSpacingPreset: boolean;
+  useJtfStylePreset: boolean; // JTFスタイルガイドプリセット
   useCustomRules: boolean;
   enableDebugLog: boolean;
   useKuromoji: boolean; // Kuromojiを使用するかどうか
+  // 個別ルール設定
+  useNoDroppingI: boolean; // い抜き言葉
+  useNoInsertDroppingSa: boolean; // さ入れ言葉
+  useNoDoubledJoshi: boolean; // 助詞の重複
+  useNoMixedZenkakuHankakuAlphabet: boolean; // 全角半角英字混在
+  usePreferTariTari: boolean; // たりたり表現
 }
 
 const DEFAULT_SETTINGS: TextlintPluginSettings = {
   useTechnicalWritingPreset: true,
   useSpacingPreset: true,
+  useJtfStylePreset: true,
   useCustomRules: true,
-  enableDebugLog: false,
-  useKuromoji: true
+  enableDebugLog: true,
+  useKuromoji: true,
+  // 個別ルール設定（デフォルトは有効）
+  useNoDroppingI: true,
+  useNoInsertDroppingSa: true,
+  useNoDoubledJoshi: true,
+  useNoMixedZenkakuHankakuAlphabet: true,
+  usePreferTariTari: true
 };
 
 interface TextlintMessage {
@@ -207,9 +221,135 @@ class TextlintSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.createEl('h2', { text: 'Textlint 設定' });
 
+    // 技術文書プリセット
+    containerEl.createEl('h3', { 
+      text: '技術文書プリセット', 
+      attr: { style: 'color: var(--text-accent); border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; margin-bottom: 16px;' }
+    });
+
+    new Setting(containerEl)
+      .setName('技術文書向けプリセット')
+      .setDesc('textlint-rule-preset-ja-technical-writing：文章の長さ、文体統一、冗長表現をチェック（推奨）')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.useTechnicalWritingPreset)
+        .onChange(async (value) => {
+          this.plugin.settings.useTechnicalWritingPreset = value;
+          await this.plugin.saveSettings();
+        }));
+
+    // スペース・句読点プリセット
+    containerEl.createEl('h3', { 
+      text: 'スペース・句読点プリセット', 
+      attr: { style: 'color: var(--text-accent); border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; margin-bottom: 16px; margin-top: 24px;' }
+    });
+
+    new Setting(containerEl)
+      .setName('スペース・句読点プリセット')
+      .setDesc('textlint-rule-preset-ja-spacing：全角半角スペース、句読点の使い方をチェック（推奨）')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.useSpacingPreset)
+        .onChange(async (value) => {
+          this.plugin.settings.useSpacingPreset = value;
+          await this.plugin.saveSettings();
+        }));
+
+    // AI文章プリセット
+    containerEl.createEl('h3', { 
+      text: 'AI文章プリセット', 
+      attr: { style: 'color: var(--text-accent); border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; margin-bottom: 16px; margin-top: 24px;' }
+    });
+
+    new Setting(containerEl)
+      .setName('AI文章向けプリセット')
+      .setDesc('@textlint-ja/textlint-rule-preset-ai-writing：AI生成文章の不自然な表現をチェック')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.useCustomRules)
+        .onChange(async (value) => {
+          this.plugin.settings.useCustomRules = value;
+          await this.plugin.saveSettings();
+        }));
+
+    // JTFスタイルプリセット
+    containerEl.createEl('h3', { 
+      text: 'JTFスタイルプリセット', 
+      attr: { style: 'color: var(--text-accent); border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; margin-bottom: 16px; margin-top: 24px;' }
+    });
+
+    new Setting(containerEl)
+      .setName('JTFスタイルガイドプリセット')
+      .setDesc('textlint-rule-preset-jtf-style：翻訳品質向上のための専門的なスタイルチェック')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.useJtfStylePreset)
+        .onChange(async (value) => {
+          this.plugin.settings.useJtfStylePreset = value;
+          await this.plugin.saveSettings();
+        }));
+
+    // 個別ルール
+    containerEl.createEl('h3', { 
+      text: '個別ルール', 
+      attr: { style: 'color: var(--text-accent); border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; margin-bottom: 16px; margin-top: 24px;' }
+    });
+
+    new Setting(containerEl)
+      .setName('い抜き言葉の検出')
+      .setDesc('@textlint-ja/textlint-rule-no-dropping-i：「見れる」→「見られる」')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.useNoDroppingI)
+        .onChange(async (value) => {
+          this.plugin.settings.useNoDroppingI = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('さ入れ言葉の検出')
+      .setDesc('@textlint-ja/textlint-rule-no-insert-dropping-sa：「食べれない」→「食べられない」')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.useNoInsertDroppingSa)
+        .onChange(async (value) => {
+          this.plugin.settings.useNoInsertDroppingSa = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('助詞の重複検出')
+      .setDesc('textlint-rule-no-doubled-joshi：「材料不足で代替素材で」')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.useNoDoubledJoshi)
+        .onChange(async (value) => {
+          this.plugin.settings.useNoDoubledJoshi = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('全角半角英字混在の検出')
+      .setDesc('textlint-rule-no-mixed-zenkaku-and-hankaku-alphabet：アルファベットの表記統一')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.useNoMixedZenkakuHankakuAlphabet)
+        .onChange(async (value) => {
+          this.plugin.settings.useNoMixedZenkakuHankakuAlphabet = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('たりたり表現の推奨')
+      .setDesc('textlint-rule-prefer-tari-tari：「歩いたり、走る」→「歩いたり、走ったり」')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.usePreferTariTari)
+        .onChange(async (value) => {
+          this.plugin.settings.usePreferTariTari = value;
+          await this.plugin.saveSettings();
+        }));
+
+    // システム設定
+    containerEl.createEl('h3', { 
+      text: 'システム設定', 
+      attr: { style: 'color: var(--text-accent); border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 8px; margin-bottom: 16px; margin-top: 24px;' }
+    });
+
     new Setting(containerEl)
       .setName('Kuromoji使用')
-      .setDesc('Kuromoji形態素解析エンジンを使用します（CDNから辞書を読み込み）')
+      .setDesc('kuromoji：日本語形態素解析エンジン（処理が重くなる場合があります）')
       .addToggle(toggle => toggle
         .setValue(this.plugin.settings.useKuromoji)
         .onChange(async (value) => {
@@ -218,44 +358,22 @@ class TextlintSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('技術文書向けプリセット')
-      .setDesc('textlint-rule-preset-ja-technical-writing を使用します')
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.useTechnicalWritingPreset)
-        .onChange(async (value) => {
-          this.plugin.settings.useTechnicalWritingPreset = value;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('スペース・句読点プリセット')
-      .setDesc('textlint-rule-preset-ja-spacing を使用します（全角半角スペース、句読点のルール）')
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.useSpacingPreset)
-        .onChange(async (value) => {
-          this.plugin.settings.useSpacingPreset = value;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('AI文章向けプリセット')
-      .setDesc('AIが生成しがちな不自然な表現を検出し、より自然な日本語への修正を提案します（@textlint-ja/textlint-rule-preset-ai-writing）')
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.useCustomRules)
-        .onChange(async (value) => {
-          this.plugin.settings.useCustomRules = value;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
       .setName('デバッグログ')
-      .setDesc('デバッグ情報をコンソールに出力します')
+      .setDesc('enableDebugLog：開発者向けの詳細情報を出力')
       .addToggle(toggle => toggle
         .setValue(this.plugin.settings.enableDebugLog)
         .onChange(async (value) => {
           this.plugin.settings.enableDebugLog = value;
           await this.plugin.saveSettings();
         }));
+
+    // ヘルプ情報
+    containerEl.createEl('div', { 
+      text: '推奨設定：「技術文書向けプリセット」と「スペース・句読点プリセット」を有効にしてください。',
+      attr: { 
+        style: 'margin-top: 24px; padding: 12px; background: var(--background-secondary); border-radius: 8px; font-size: 0.9em; border-left: 3px solid var(--color-accent);' 
+      }
+    });
   }
 }
 
@@ -438,7 +556,7 @@ export default class TextlintHighlightPlugin extends Plugin {
 
               return Decoration.mark({
                 class: `textlint-highlight textlint-severity-${message.severity}`,
-                attributes: { title: `${message.ruleId}: ${message.message}` },
+                attributes: { 'data-textlint-message': `${message.ruleId}: ${message.message}` },
               }).range(from, to);
 
             } catch (e) {
@@ -459,6 +577,36 @@ export default class TextlintHighlightPlugin extends Plugin {
 
   private editorExtension = [
     this.highlightField,
+    hoverTooltip((view, pos, side) => {
+      // 現在の位置にハイライトがあるかチェック
+      const decorations = view.state.field(this.highlightField);
+      let foundTooltip: string | null = null;
+      
+      // 該当位置のDecorationを検索（最初の一致で停止）
+      decorations.between(pos, pos, (from: number, to: number, decoration: Decoration) => {
+        const message = decoration.spec.attributes?.['data-textlint-message'];
+        if (message && !foundTooltip) {
+          foundTooltip = message;
+          return false; // 停止
+        }
+      });
+      
+      // ツールチップが見つかった場合のみ作成
+      if (foundTooltip) {
+        return {
+          pos,
+          above: true,
+          create: () => {
+            const dom = document.createElement("div");
+            dom.className = "textlint-tooltip";
+            dom.textContent = foundTooltip;
+            return { dom };
+          }
+        };
+      }
+      
+      return null;
+    }),
     EditorView.baseTheme({
       ".textlint-highlight": {
         backgroundColor: "rgba(255, 255, 0, 0.3)",
@@ -473,6 +621,18 @@ export default class TextlintHighlightPlugin extends Plugin {
       ".textlint-severity-2": {
         backgroundColor: "rgba(220, 53, 69, 0.2)",
         borderBottomColor: "#dc3545",
+      },
+      ".textlint-tooltip": {
+        background: "var(--background-primary)",
+        border: "1px solid var(--background-modifier-border)",
+        borderRadius: "4px",
+        padding: "8px 12px",
+        fontSize: "0.9em",
+        color: "var(--text-normal)",
+        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+        maxWidth: "300px",
+        wordWrap: "break-word",
+        zIndex: 10000,
       }
     }),
   ];
@@ -711,11 +871,25 @@ export default class TextlintHighlightPlugin extends Plugin {
               }
             }
             
-            rules.push({
-              ruleId: `spacing/${ruleId}`,
-              rule: actualRule,
-              options: preset.rulesConfig?.[ruleId] || true
-            });
+            // ルール設定をチェック（無効化されているルールをスキップ）
+            const ruleOptions = preset.rulesConfig?.[ruleId] === false ? false : 
+              (typeof preset.rulesConfig?.[ruleId] === 'object' ? preset.rulesConfig[ruleId] : true);
+            
+            if (ruleOptions !== false) {
+              rules.push({
+                ruleId: `spacing/${ruleId}`,
+                rule: actualRule,
+                options: ruleOptions
+              });
+              
+              if (this.settings.enableDebugLog) {
+                console.log(`Successfully loaded spacing rule: ${ruleId}`);
+              }
+            } else {
+              if (this.settings.enableDebugLog) {
+                console.log(`Spacing rule ${ruleId} is disabled, skipping`);
+              }
+            }
           });
         }
       } catch (error) {
@@ -808,6 +982,190 @@ export default class TextlintHighlightPlugin extends Plugin {
         console.error("AI文章向けプリセットの読み込みに失敗:", error);
         if (this.settings.enableDebugLog) {
           console.error("詳細エラー:", error);
+        }
+      }
+    }
+
+    // JTFスタイルガイドプリセット
+    if (this.settings.useJtfStylePreset) {
+      try {
+        const jtfPreset = require("textlint-rule-preset-jtf-style");
+        
+        if (this.settings.enableDebugLog) {
+          console.log('JTF style preset structure:', Object.keys(jtfPreset));
+          console.log('JTF style preset default keys:', Object.keys(jtfPreset.default || {}));
+        }
+        
+        // プリセットの正しい構造にアクセス
+        const preset = jtfPreset.default || jtfPreset;
+        const presetRules = preset.rules || {};
+        const presetRulesConfig = preset.rulesConfig || {};
+        
+        if (this.settings.enableDebugLog) {
+          console.log('JTF Rules config:', presetRulesConfig);
+          console.log('JTF Preset rules keys:', Object.keys(presetRules));
+        }
+        
+        // ルールを読み込む
+        if (presetRules && typeof presetRules === 'object') {
+          Object.entries(presetRules).forEach(([ruleId, rule]) => {
+            try {
+              // ルール設定をチェック
+              const ruleOptions = presetRulesConfig[ruleId];
+              if (ruleOptions === false) {
+                if (this.settings.enableDebugLog) {
+                  console.log(`JTF Rule ${ruleId} is disabled, skipping`);
+                }
+                return;
+              }
+              
+              // ルール関数を取得
+              let actualRule = rule;
+              if (typeof rule !== 'function') {
+                if (rule && typeof rule === 'object') {
+                  if ((rule as any).default && typeof (rule as any).default === 'function') {
+                    actualRule = (rule as any).default;
+                  } else if ((rule as any).linter && typeof (rule as any).linter === 'function') {
+                    actualRule = (rule as any).linter;
+                  } else {
+                    if (this.settings.enableDebugLog) {
+                      console.warn(`JTF Rule ${ruleId} is not a valid function:`, typeof rule, rule);
+                    }
+                    return;
+                  }
+                } else {
+                  if (this.settings.enableDebugLog) {
+                    console.warn(`JTF Rule ${ruleId} is not valid:`, typeof rule);
+                  }
+                  return;
+                }
+              }
+              
+              // 最終チェック: actualRuleが関数かどうか
+              if (typeof actualRule === 'function') {
+                rules.push({
+                  ruleId: `jtf-style/${ruleId}`,
+                  rule: actualRule,
+                  options: ruleOptions || true
+                });
+                
+                if (this.settings.enableDebugLog) {
+                  console.log(`Successfully loaded JTF style rule: ${ruleId}`);
+                }
+              } else {
+                if (this.settings.enableDebugLog) {
+                  console.warn(`Final validation failed for JTF rule ${ruleId}:`, typeof actualRule);
+                }
+              }
+              
+            } catch (error) {
+              if (this.settings.enableDebugLog) {
+                console.warn(`Failed to process JTF rule ${ruleId}:`, error.message);
+              }
+            }
+          });
+        }
+        
+      } catch (error) {
+        console.error("JTFスタイルガイドプリセットの読み込みに失敗:", error);
+        if (this.settings.enableDebugLog) {
+          console.error("詳細エラー:", error);
+        }
+      }
+    }
+
+    // 個別ルール設定
+    const individualRules = [
+      { 
+        name: '@textlint-ja/textlint-rule-no-dropping-i',
+        setting: this.settings.useNoDroppingI,
+        description: 'い抜き言葉'
+      },
+      { 
+        name: '@textlint-ja/textlint-rule-no-insert-dropping-sa',
+        setting: this.settings.useNoInsertDroppingSa,
+        description: 'さ入れ言葉'
+      },
+      { 
+        name: 'no-doubled-joshi',
+        setting: this.settings.useNoDoubledJoshi,
+        description: '助詞の重複'
+      },
+      { 
+        name: 'no-mixed-zenkaku-and-hankaku-alphabet',
+        setting: this.settings.useNoMixedZenkakuHankakuAlphabet,
+        description: '全角半角英字混在'
+      },
+      { 
+        name: 'prefer-tari-tari',
+        setting: this.settings.usePreferTariTari,
+        description: 'たりたり表現'
+      }
+    ];
+
+    for (const ruleInfo of individualRules) {
+      if (!ruleInfo.setting) {
+        if (this.settings.enableDebugLog) {
+          console.log(`Skipping ${ruleInfo.description} rule (${ruleInfo.name}) - disabled in settings`);
+        }
+        continue;
+      }
+
+      try {
+        let ruleModule: any;
+        if (ruleInfo.name.startsWith('textlint-rule-')) {
+          ruleModule = require(ruleInfo.name);
+        } else if (ruleInfo.name.startsWith('@textlint-ja/')) {
+          ruleModule = require(ruleInfo.name);
+        } else {
+          ruleModule = require(`textlint-rule-${ruleInfo.name}`);
+        }
+
+        if (ruleModule) {
+          // 個別ルール形式の場合
+          let actualRule = ruleModule;
+          
+          // ルールが関数でない場合の処理
+          if (typeof ruleModule !== 'function') {
+            if (ruleModule && typeof ruleModule === 'object') {
+              if (ruleModule.default && typeof ruleModule.default === 'function') {
+                actualRule = ruleModule.default;
+              } else if (ruleModule.linter && typeof ruleModule.linter === 'function') {
+                actualRule = ruleModule.linter;
+              } else {
+                if (this.settings.enableDebugLog) {
+                  console.warn(`Rule ${ruleInfo.name} is not a valid function:`, typeof ruleModule, ruleModule);
+                }
+                continue;
+              }
+            } else {
+              if (this.settings.enableDebugLog) {
+                console.warn(`Rule ${ruleInfo.name} is not valid:`, typeof ruleModule);
+              }
+              continue;
+            }
+          }
+          
+          // 最終チェック: actualRuleが関数かどうか
+          if (typeof actualRule === 'function') {
+            rules.push({
+              ruleId: `additional/${ruleInfo.name}`,
+              rule: actualRule,
+              options: true
+            });
+            
+            if (this.settings.enableDebugLog) {
+              console.log(`Successfully loaded ${ruleInfo.description} rule: ${ruleInfo.name}`);
+            }
+          } else {
+            if (this.settings.enableDebugLog) {
+              console.warn(`Final validation failed for rule ${ruleInfo.name}:`, typeof actualRule);
+            }
+          }
+        }
+      } catch (error) {
+        if (this.settings.enableDebugLog) {
+          console.warn(`Failed to load ${ruleInfo.description} rule ${ruleInfo.name}:`, error.message);
         }
       }
     }
