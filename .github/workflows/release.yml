@@ -38,7 +38,7 @@ jobs:
       # 必要なファイルを ZIP にまとめる
       - name: Package plugin
         run: |
-          PLUGIN_NAME="obsidian-widget-board-plugin"
+          PLUGIN_NAME="obsidian-textlint-highlighter-plugin"
           mkdir -p "$PLUGIN_NAME"
           cp main.js "$PLUGIN_NAME/"
           cp manifest.json "$PLUGIN_NAME/"
