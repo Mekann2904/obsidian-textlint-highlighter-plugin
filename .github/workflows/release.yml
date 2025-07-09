@@ -54,7 +54,7 @@ jobs:
             --title="Release $TAG" \
             --notes="New release of $PLUGIN_NAME" \
             --draft \
-            obsidian-widget-board-plugin.zip \
+            obsidian-textlint-highlighter-plugin.zip \
             main.js \
             manifest.json \
             styles.css
