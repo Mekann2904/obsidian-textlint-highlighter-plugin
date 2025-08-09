@@ -1,4 +1,10 @@
 export interface TextlintPluginSettings {
+  // デバウンス時間(ms): 入力時の連続実行を抑制
+  debounceMs: number;
+  // 解析対象の最大ファイルサイズ(KB)
+  maxFileSizeKB: number;
+  // 自動解析の有効/無効（リボンおよび設定から切り替え）
+  enableAutoLint: boolean;
   useTechnicalWritingPreset: boolean;
   useSpacingPreset: boolean;
   useJtfStylePreset: boolean;
@@ -23,6 +29,9 @@ export interface TextlintPluginSettings {
 }
 
 export const DEFAULT_SETTINGS: TextlintPluginSettings = {
+  debounceMs: 600,
+  maxFileSizeKB: 512,
+  enableAutoLint: true,
   useTechnicalWritingPreset: true,
   useSpacingPreset: true,
   useJtfStylePreset: true,

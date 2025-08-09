@@ -3,11 +3,13 @@ import { Decoration, DecorationSet, EditorView, hoverTooltip } from '@codemirror
 import { MarkdownView } from 'obsidian';
 import { TextlintMessage } from '../types';
 import { MemoryManager } from '../utils/MemoryManager';
+import { ErrorHandler, ErrorSeverity, ErrorCategory } from '../utils/ErrorHandler';
 
 export class EditorExtension {
   private app: any;
   private enableDebugLog: boolean = false;
   private memoryManager: MemoryManager;
+  private errorHandler: ErrorHandler;
 
   // State effects for managing highlights
   public updateHighlightsEffect = StateEffect.define<TextlintMessage[]>();
@@ -15,6 +17,7 @@ export class EditorExtension {
   constructor(app: any) {
     this.app = app;
     this.memoryManager = MemoryManager.getInstance();
+    this.errorHandler = ErrorHandler.getInstance();
   }
 
   public setDebugMode(enabled: boolean): void {
@@ -68,8 +71,21 @@ export class EditorExtension {
           }
         }
       } catch (e) {
-        if (this.enableDebugLog) {
-          console.error(`Failed to create decoration ${index + 1}:`, e, message);
+        // Use ErrorHandler for decoration creation errors
+        const context = {
+          operation: 'decoration_creation',
+          timestamp: Date.now(),
+          stackTrace: e.stack,
+          additionalData: { messageIndex: index + 1, message }
+        };
+        
+        const strategy = this.errorHandler.handleUIError(e, 'EditorExtension.createDecorations');
+        const errorKey = `decoration_${index}_${Date.now()}`;
+        this.errorHandler.executeRecovery(strategy, errorKey);
+        
+        // Only notify for high severity errors to avoid spam
+        if (strategy.severity === ErrorSeverity.HIGH || strategy.severity === ErrorSeverity.CRITICAL) {
+          this.errorHandler.notifyUser(strategy);
         }
       }
     });
@@ -187,9 +203,23 @@ export class EditorExtension {
       }).range(from, to);
 
     } catch (e) {
+      // Use ErrorHandler for single decoration creation errors
+      const context = {
+        operation: 'single_decoration_creation',
+        timestamp: Date.now(),
+        stackTrace: e.stack,
+        additionalData: { message }
+      };
+      
+      const strategy = this.errorHandler.handleUIError(e, 'EditorExtension.createSingleDecoration');
+      const errorKey = `single_decoration_${Date.now()}`;
+      this.errorHandler.executeRecovery(strategy, errorKey);
+      
+      // Only log for debug mode to avoid spam
       if (this.enableDebugLog) {
         console.error("Failed to create single decoration:", e, message);
       }
+      
       return null;
     }
   }
@@ -345,4 +375,28 @@ export class EditorExtension {
       this.createBaseTheme(),
     ];
   }
-} 
+
+  // 既存エディタに拡張を動的適用（再起動や再オープン不要に）
+  public installToAllOpenEditors(): void {
+    try {
+      this.app.workspace.iterateAllLeaves((leaf: any) => {
+        const view = leaf?.view;
+        if (view instanceof MarkdownView) {
+          const cm = (view as any).editor?.cm;
+          if (cm) {
+            try {
+              cm.dispatch({ effects: StateEffect.appendConfig.of(this.getExtensions()) });
+              if (this.enableDebugLog) {
+                console.log('Applied CM extensions to existing editor');
+              }
+            } catch (e) {
+              if (this.enableDebugLog) console.warn('Failed to append CM config:', e);
+            }
+          }
+        }
+      });
+    } catch (e) {
+      if (this.enableDebugLog) console.warn('iterateAllLeaves not available or failed:', e);
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { TextlintPluginSettings } from '../types';
+import { ErrorHandler, ErrorSeverity, ErrorCategory } from './ErrorHandler';
 
 export interface ProcessingStrategy {
   maxFileSize: number;
@@ -8,6 +9,8 @@ export interface ProcessingStrategy {
 }
 
 export class AdaptiveProcessor {
+  private static errorHandler = ErrorHandler.getInstance();
+  
   private static readonly STRATEGIES: ProcessingStrategy[] = [
     {
       maxFileSize: 1000,        // 1000行未満
@@ -128,8 +131,41 @@ export class AdaptiveProcessor {
            
            results.push({ result, lines: chunk.lines });
          } catch (error) {
-           console.warn(`チャンク ${i + 1}/${chunkData.length} の処理でエラー:`, error);
-           // エラーが発生したチャンクはスキップして続行
+           // Use ErrorHandler for chunk processing errors
+           const context = {
+             operation: 'chunk_processing',
+             timestamp: Date.now(),
+             stackTrace: error.stack,
+             additionalData: { 
+               chunkIndex: i + 1, 
+               totalChunks: chunkData.length,
+               chunkSize: chunkData[i].lines 
+             }
+           };
+
+           let strategy;
+           if (error.message.includes('タイムアウト') || error.message.includes('timeout')) {
+             strategy = this.errorHandler.handleProcessingTimeout(context);
+           } else {
+             this.errorHandler.logError(error, context);
+             strategy = {
+               canRecover: true,
+               fallbackAction: async () => {
+                 // Skip this chunk and continue
+               },
+               userMessage: `Chunk ${i + 1}/${chunkData.length} processing failed. Continuing with remaining chunks.`,
+               severity: ErrorSeverity.MEDIUM,
+               category: ErrorCategory.PROCESSING
+             };
+           }
+
+           const errorKey = `chunk_${i}_${Date.now()}`;
+           await this.errorHandler.executeRecovery(strategy, errorKey);
+           
+           // Only notify user for high severity errors to avoid spam
+           if (strategy.severity === ErrorSeverity.HIGH || strategy.severity === ErrorSeverity.CRITICAL) {
+             this.errorHandler.notifyUser(strategy);
+           }
          }
        }
       

@@ -1,5 +1,6 @@
 import { TextlintRule, TextlintPluginSettings, RuleConfig } from '../types';
 import { Cache } from '../utils/Cache';
+import { ErrorHandler, ErrorSeverity, ErrorCategory } from '../utils/ErrorHandler';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -49,10 +50,12 @@ export class RuleLoader {
   private rulesCache: Cache<TextlintRule[]>;
   private configCache: Cache<any>;
   private enableDebugLog: boolean = false;
+  private errorHandler: ErrorHandler;
 
   private constructor() {
     this.rulesCache = new Cache<TextlintRule[]>(10 * 60 * 1000); // 10 minutes cache
     this.configCache = new Cache<any>(10 * 60 * 1000);
+    this.errorHandler = ErrorHandler.getInstance();
   }
 
   public static getInstance(): RuleLoader {
@@ -86,41 +89,25 @@ export class RuleLoader {
 
     const rules: TextlintRule[] = [];
 
-    // 各プリセットを並列処理で読み込み
-    const presetTasks = [];
+    // ラベル付きで並列読み込み（エラー分類の取り違えを防止）
+    const tasks: { label: string; promise: Promise<TextlintRule[]> }[] = [];
+    if (settings.useTechnicalWritingPreset) tasks.push({ label: 'technical-writing', promise: this.loadTechnicalWritingPreset() });
+    if (settings.useSpacingPreset) tasks.push({ label: 'spacing', promise: this.loadSpacingPreset() });
+    if (settings.useCustomRules) tasks.push({ label: 'ai-writing', promise: this.loadAiWritingPreset() });
+    if (settings.useJtfStylePreset) tasks.push({ label: 'jtf-style', promise: this.loadJtfStylePreset() });
+    if (settings.useJapanesePreset) tasks.push({ label: 'japanese', promise: this.loadJapanesePreset() });
+    tasks.push({ label: 'individual-rules', promise: this.loadIndividualRules(settings) });
 
-    if (settings.useTechnicalWritingPreset) {
-      presetTasks.push(this.loadTechnicalWritingPreset());
-    }
-
-    if (settings.useSpacingPreset) {
-      presetTasks.push(this.loadSpacingPreset());
-    }
-
-    if (settings.useCustomRules) {
-      presetTasks.push(this.loadAiWritingPreset());
-    }
-
-    if (settings.useJtfStylePreset) {
-      presetTasks.push(this.loadJtfStylePreset());
-    }
-
-    if (settings.useJapanesePreset) {
-      presetTasks.push(this.loadJapanesePreset());
-    }
-
-    // 個別ルール
-    presetTasks.push(this.loadIndividualRules(settings));
-
-    // 並列実行
-    const results = await Promise.allSettled(presetTasks);
-    
-    // 結果をマージ
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        rules.push(...result.value);
+    const results = await Promise.allSettled(tasks.map(t => t.promise));
+    results.forEach((res, i) => {
+      const label = tasks[i].label;
+      if (res.status === 'fulfilled') {
+        rules.push(...res.value);
       } else {
-        console.error(`ルール読み込みエラー (Task ${index}):`, result.reason);
+        const strategy = this.errorHandler.handleRuleLoadError(res.reason, label);
+        const errorKey = `rule_loading_${label}_${Date.now()}`;
+        this.errorHandler.executeRecovery(strategy, errorKey);
+        this.errorHandler.notifyUser(strategy);
       }
     });
 
@@ -176,7 +163,10 @@ export class RuleLoader {
         });
       }
     } catch (error) {
-      console.error("技術文書向けプリセットの読み込みに失敗:", error);
+      const strategy = this.errorHandler.handleRuleLoadError(error, 'technical-writing-preset');
+      this.errorHandler.notifyUser(strategy);
+      const errorKey = `preset_technical_writing_${Date.now()}`;
+      this.errorHandler.executeRecovery(strategy, errorKey);
     }
     
     return rules;
@@ -203,7 +193,10 @@ export class RuleLoader {
         });
       }
     } catch (error) {
-      console.error("スペース・句読点プリセットの読み込みに失敗:", error);
+      const strategy = this.errorHandler.handleRuleLoadError(error, 'spacing-preset');
+      this.errorHandler.notifyUser(strategy);
+      const errorKey = `preset_spacing_${Date.now()}`;
+      this.errorHandler.executeRecovery(strategy, errorKey);
     }
     
     return rules;
@@ -231,7 +224,10 @@ export class RuleLoader {
         }
       });
     } catch (error) {
-      console.error("AI文章向けプリセットの読み込みに失敗:", error);
+      const strategy = this.errorHandler.handleRuleLoadError(error, 'ai-writing-preset');
+      this.errorHandler.notifyUser(strategy);
+      const errorKey = `preset_ai_writing_${Date.now()}`;
+      this.errorHandler.executeRecovery(strategy, errorKey);
     }
     
     return rules;
@@ -259,7 +255,10 @@ export class RuleLoader {
         }
       });
     } catch (error) {
-      console.error("JTFスタイルガイドプリセットの読み込みに失敗:", error);
+      const strategy = this.errorHandler.handleRuleLoadError(error, 'jtf-style-preset');
+      this.errorHandler.notifyUser(strategy);
+      const errorKey = `preset_jtf_style_${Date.now()}`;
+      this.errorHandler.executeRecovery(strategy, errorKey);
     }
     
     return rules;
@@ -286,7 +285,10 @@ export class RuleLoader {
         });
       }
     } catch (error) {
-      console.error("日本語プリセットの読み込みに失敗:", error);
+      const strategy = this.errorHandler.handleRuleLoadError(error, 'japanese-preset');
+      this.errorHandler.notifyUser(strategy);
+      const errorKey = `preset_japanese_${Date.now()}`;
+      this.errorHandler.executeRecovery(strategy, errorKey);
     }
     
     return rules;
@@ -424,9 +426,10 @@ export class RuleLoader {
           }
         }
       } catch (error) {
-        if (this.enableDebugLog) {
-          console.warn(`Failed to load ${ruleInfo.description} rule ${ruleInfo.name}:`, error.message);
-        }
+        const strategy = this.errorHandler.handleRuleLoadError(error, ruleInfo.name);
+        this.errorHandler.notifyUser(strategy);
+        const errorKey = `individual_rule_${ruleInfo.name}_${Date.now()}`;
+        this.errorHandler.executeRecovery(strategy, errorKey);
       }
     }
 
@@ -500,5 +503,21 @@ export class RuleLoader {
       rules: this.rulesCache.getStats(),
       config: this.configCache.getStats()
     };
+  }
+
+  /**
+   * Get rule type name by task index for error reporting
+   */
+  private getRuleTypeByIndex(index: number): string {
+    const ruleTypes = [
+      'technical-writing',
+      'spacing',
+      'ai-writing',
+      'jtf-style',
+      'japanese',
+      'individual-rules'
+    ];
+    
+    return ruleTypes[index] || `unknown-${index}`;
   }
 } 

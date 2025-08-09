@@ -1,15 +1,18 @@
 import { ItemView, WorkspaceLeaf, TFile, MarkdownView, Notice } from 'obsidian';
 import { TextlintMessage, VIEW_TYPE_TEXTLINT } from '../types';
+import { ErrorHandler, ErrorSeverity, ErrorCategory } from '../utils/ErrorHandler';
 
 export class TextlintView extends ItemView {
   private messages: TextlintMessage[] = [];
   private currentFile: TFile | null = null;
   private highlightTimeout: NodeJS.Timeout | null = null;
   private plugin: any;
+  private errorHandler: ErrorHandler;
 
   constructor(leaf: WorkspaceLeaf, plugin: any) {
     super(leaf);
     this.plugin = plugin;
+    this.errorHandler = ErrorHandler.getInstance();
   }
 
   getViewType() {
@@ -58,7 +61,8 @@ export class TextlintView extends ItemView {
     });
     runBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5,3 19,12 5,21 5,3"></polygon></svg>`;
     runBtn.onclick = () => {
-      this.plugin.lintCurrentFileImmediately();
+      // 手動実行は強制実行（自動OFFやmanualモードでも走る）
+      this.plugin.lintCurrentFileImmediately({ force: true, file: this.currentFile || undefined });
       new Notice("Textlintを実行中...");
     };
 
@@ -207,32 +211,63 @@ export class TextlintView extends ItemView {
 
   private async jumpToLine(line: number, column: number, endLine?: number, endColumn?: number) {
     if (!this.currentFile) return;
-    
-    try {
-      const leaf = this.app.workspace.getLeaf(false);
-      await leaf.openFile(this.currentFile);
-      
-      const view = leaf.view;
-      if (view instanceof MarkdownView) {
-        const editor = view.editor;
-        
-        // ジャンプ
-        const pos = { line: line - 1, ch: column - 1 };
-        editor.setCursor(pos);
-        editor.scrollIntoView({ from: pos, to: pos }, true);
-        
-        // ハイライト
-        if (endLine && endColumn) {
-          const endPos = { line: endLine - 1, ch: endColumn - 1 };
-          editor.setSelection(pos, endPos);
-        }
 
-        // 短時間ハイライト表示
-        this.temporaryHighlight(editor, pos, endLine && endColumn ? { line: endLine - 1, ch: endColumn - 1 } : undefined);
+    try {
+      // 既存リーフではなくアクティブリーフを優先
+      let leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(this.currentFile);
+
+      // ビュー初期化待ち（最大10回、各50ms）
+      let view = leaf.view;
+      let retries = 0;
+      while (!(view instanceof MarkdownView) && retries < 10) {
+        await new Promise(res => setTimeout(res, 50));
+        view = leaf.view;
+        retries++;
+      }
+
+      if (!(view instanceof MarkdownView)) {
+        // それでも取れない場合はアクティブビューを試す
+        view = this.app.workspace.getActiveViewOfType(MarkdownView) as any;
+        if (!(view instanceof MarkdownView)) return; // 何もできないが静かに終了
+      }
+
+      const editor = (view as MarkdownView).editor;
+      const lineCount = editor.lineCount();
+      if (lineCount <= 0) return;
+
+      // 範囲を安全にクランプ
+      const clampedLine = Math.max(0, Math.min((line || 1) - 1, lineCount - 1));
+      const lineText = editor.getLine(clampedLine) || '';
+      const clampedCh = Math.max(0, Math.min((column || 1) - 1, Math.max(0, lineText.length)));
+      const pos = { line: clampedLine, ch: clampedCh };
+
+      try {
+        editor.setCursor(pos);
+      } catch {}
+      try {
+        editor.scrollIntoView({ from: pos, to: pos }, true);
+      } catch {}
+
+      // ハイライト（終端もクランプ）
+      if (endLine && endColumn) {
+        const endLineIdx = Math.max(0, Math.min(endLine - 1, lineCount - 1));
+        const endLineText = editor.getLine(endLineIdx) || '';
+        const endChIdx = Math.max(0, Math.min(endColumn - 1, Math.max(0, endLineText.length)));
+        const endPos = { line: endLineIdx, ch: endChIdx };
+        try {
+          editor.setSelection(pos, endPos);
+        } catch {}
+        this.temporaryHighlight(editor, pos, endPos);
+      } else {
+        this.temporaryHighlight(editor, pos);
       }
     } catch (error) {
-      console.error("Failed to jump to line:", error);
-      new Notice("行へのジャンプに失敗しました");
+      // UIエラーは静かに復旧（ユーザ通知は抑制）
+      const strategy = this.errorHandler.handleUIError(error as any, 'TextlintView.jumpToLine');
+      const errorKey = `jump_to_line_${Date.now()}`;
+      this.errorHandler.executeRecovery(strategy, errorKey);
+      // 通知は行わない（安定性のため）
     }
   }
 
@@ -242,11 +277,17 @@ export class TextlintView extends ItemView {
     }
 
     // 一時的なハイライト
-    const endPos = to || { line: from.line, ch: from.ch + 5 };
-    editor.setSelection(from, endPos);
+    const safeFrom = {
+      line: Math.max(0, from?.line ?? 0),
+      ch: Math.max(0, from?.ch ?? 0)
+    };
+    const endPos = to || { line: safeFrom.line, ch: safeFrom.ch + 5 };
+    try {
+      editor.setSelection(safeFrom, endPos);
+    } catch {}
 
     this.highlightTimeout = setTimeout(() => {
-      editor.setCursor(from);
+      try { editor.setCursor(safeFrom); } catch {}
     }, 1500); // 1.5秒後にハイライトを解除
   }
 
@@ -272,8 +313,12 @@ export class TextlintView extends ItemView {
 
     navigator.clipboard.writeText(text).then(() => {
       new Notice("結果をクリップボードにコピーしました");
-    }).catch(() => {
-      new Notice("コピーに失敗しました");
+    }).catch((error) => {
+      // Use ErrorHandler for clipboard errors
+      const strategy = this.errorHandler.handleUIError(error, 'TextlintView.copyResults');
+      this.errorHandler.notifyUser(strategy);
+      const errorKey = `copy_results_${Date.now()}`;
+      this.errorHandler.executeRecovery(strategy, errorKey);
     });
   }
 } 

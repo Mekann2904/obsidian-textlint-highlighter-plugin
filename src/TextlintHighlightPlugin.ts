@@ -14,6 +14,7 @@ import { EditorExtension } from './editor/EditorExtension';
 import { TextlintView } from './views/TextlintView';
 import { TextlintSettingTab } from './settings/TextlintSettingTab';
 import { MemoryManager } from './utils/MemoryManager';
+import { ErrorHandler, ErrorSeverity, ErrorCategory } from './utils/ErrorHandler';
 
 export class TextlintHighlightPlugin extends Plugin {
   private kernel: TextlintKernel;
@@ -23,12 +24,15 @@ export class TextlintHighlightPlugin extends Plugin {
   private resultCache: Cache<TextlintMessage[]>;
   private editorExtension: EditorExtension;
   private memoryManager: MemoryManager;
+  private errorHandler: ErrorHandler;
+  private ribbonEl: HTMLElement | null = null;
   
   // Performance tracking - 最適化されたデバウンス処理
   private optimizedDebouncer: (() => void) | null = null;
   private throttledLinter: (() => void) | null = null;
   private lastProcessedFile: string | null = null;
   private lastContentHash: string | null = null;
+  private currentLintToken: number = 0;
   private performanceStats = {
     cacheHits: 0,
     cacheMisses: 0,
@@ -42,8 +46,15 @@ export class TextlintHighlightPlugin extends Plugin {
     // メモリマネージャーの初期化
     this.memoryManager = MemoryManager.getInstance();
     
+    // エラーハンドラーの初期化
+    this.errorHandler = ErrorHandler.getInstance();
+    this.errorHandler.setDebugMode(this.settings?.enableDebugLog || false);
+    
     // 設定の読み込み（軽量）
     await this.loadSettings();
+    
+    // エラーハンドラーのデバッグモードを設定に合わせて更新
+    this.errorHandler.setDebugMode(this.settings.enableDebugLog);
     
     // 軽量な依存関係の初期化のみ
     this.initializeBasicDependencies();
@@ -55,6 +66,23 @@ export class TextlintHighlightPlugin extends Plugin {
     this.setupOptimizedEventListeners();
     
     console.log('Textlint Highlighter Plugin: 高速読み込み完了');
+  }
+
+  private recreateTimers() {
+    const debounceMs = Math.max(100, this.settings.debounceMs || 600);
+    const throttleMs = Math.max(100, Math.floor(debounceMs / 2));
+
+    // トリガー時の対象ファイルを引数で受け取り、遅延後も同じファイルで実行
+    this.optimizedDebouncer = this.memoryManager.createOptimizedDebouncer(
+      (file?: TFile) => this.lintCurrentFileImmediately({ file }),
+      debounceMs
+    ) as unknown as () => void;
+
+    // スロットラは使用箇所で対象ファイルを直接指定して実行
+    this.throttledLinter = this.memoryManager.createThrottler(
+      () => this.lintCurrentFileImmediately(),
+      throttleMs
+    );
   }
 
   onunload() {
@@ -72,16 +100,8 @@ export class TextlintHighlightPlugin extends Plugin {
     this.editorExtension = new EditorExtension(this.app);
     this.editorExtension.setDebugMode(this.settings.enableDebugLog);
 
-    // 最適化されたデバウンサーとスロットラーの作成
-    this.optimizedDebouncer = this.memoryManager.createOptimizedDebouncer(
-      () => this.lintCurrentFileImmediately(),
-      500 // 統一された遅延時間
-    );
-
-    this.throttledLinter = this.memoryManager.createThrottler(
-      () => this.lintCurrentFileImmediately(),
-      200 // スロットリング間隔
-    );
+    // 最適化されたデバウンサーとスロットラーの作成（設定値を反映）
+    this.recreateTimers();
   }
 
   private async initializeHeavyDependencies() {
@@ -104,15 +124,63 @@ export class TextlintHighlightPlugin extends Plugin {
   private setupUI() {
     // エディタ拡張の登録
     this.registerEditorExtension(this.editorExtension.getExtensions());
+    // 既存エディタにも即時適用
+    this.editorExtension.installToAllOpenEditors();
     
     // 設定タブの追加
     this.addSettingTab(new TextlintSettingTab(this.app, this));
     
+    // リボンの追加（ON/OFF トグル）
+    this.setupRibbonToggle();
+
     // ビューの登録
     this.registerView(
       VIEW_TYPE_TEXTLINT,
       (leaf) => new TextlintView(leaf, this)
     );
+  }
+
+  private setupRibbonToggle() {
+    try {
+      const title = () => `Textlint 自動解析: ${this.settings.enableAutoLint ? 'ON' : 'OFF'}\nクリックで切り替え`;
+      this.ribbonEl = this.addRibbonIcon('highlighter', title(), () => {
+        this.toggleAutoLint();
+      });
+      this.ribbonEl?.addClass('textlint-ribbon');
+    } catch (e) {
+      console.error('Failed to setup ribbon toggle:', e);
+    }
+  }
+
+  private updateRibbonTitle() {
+    if (this.ribbonEl) {
+      this.ribbonEl.setAttribute('aria-label', `Textlint 自動解析: ${this.settings.enableAutoLint ? 'ON' : 'OFF'}`);
+    }
+  }
+
+  public async toggleAutoLint() {
+    this.settings.enableAutoLint = !this.settings.enableAutoLint;
+    await this.saveSettings();
+    this.updateRibbonTitle();
+
+    if (!this.settings.enableAutoLint) {
+      // 無効化時はハイライトとビューをリセット
+      this.editorExtension.updateHighlights([]);
+      this.app.workspace.detachLeavesOfType(VIEW_TYPE_TEXTLINT);
+      new Notice('Textlint 自動解析を無効化しました');
+    } else {
+      new Notice('Textlint 自動解析を有効化しました');
+      // 既存エディタに拡張を適用（再オープン不要）
+      this.editorExtension.installToAllOpenEditors();
+      // 有効化直後は現在のノートを即時解析（アイドル待ちを避ける）
+      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (activeView?.file) {
+        this.lintCurrentFile({ force: true, file: activeView.file });
+      } else {
+        // フォールバック（取得できない場合は従来の即時実行）
+        this.lintCurrentFileImmediately({ force: true });
+      }
+    }
   }
 
   private setupOptimizedEventListeners() {
@@ -122,10 +190,15 @@ export class TextlintHighlightPlugin extends Plugin {
         console.log('Workspace layout ready, scheduling initial lint');
       }
       
-      // アイドル時間に初期lintを実行
-      this.memoryManager.runWhenIdle(() => {
-        this.optimizedDebouncer?.();
-      }, 2000);
+      // アイドル時間に初期lintを実行（自動ON時）
+      if (this.settings.enableAutoLint) {
+        this.memoryManager.runWhenIdle(() => {
+          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (activeView?.file) {
+            (this.optimizedDebouncer as any)?.(activeView.file || undefined);
+          }
+        }, 2000);
+      }
     });
 
     // アクティブなリーフ変更時（統一されたデバウンサー使用）
@@ -134,9 +207,11 @@ export class TextlintHighlightPlugin extends Plugin {
         if (this.settings.enableDebugLog) {
           console.log('Active leaf changed:', leaf?.view?.getViewType());
         }
-        const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (activeView) {
-          this.optimizedDebouncer?.();
+        if (this.settings.enableAutoLint) {
+          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (activeView?.file) {
+            (this.optimizedDebouncer as any)?.(activeView.file || undefined);
+          }
         }
       })
     );
@@ -149,8 +224,10 @@ export class TextlintHighlightPlugin extends Plugin {
             console.log('File opened:', file.path);
           }
           
-          // ファイルオープン時は即座に実行（スロットリング使用）
-          this.throttledLinter?.();
+          // ファイルオープン時は対象ファイルで即座に実行（自動ON時）
+          if (this.settings.enableAutoLint) {
+            this.lintCurrentFileImmediately({ file });
+          }
         }
       })
     );
@@ -158,8 +235,11 @@ export class TextlintHighlightPlugin extends Plugin {
     // エディタ変更時（メイン - 最適化されたデバウンサー使用）
     this.registerEvent(
       this.app.workspace.on('editor-change', () => {
-        if (this.app.workspace.getActiveViewOfType(MarkdownView)) {
-          this.optimizedDebouncer?.();
+        if (this.settings.enableAutoLint) {
+          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (activeView?.file) {
+            (this.optimizedDebouncer as any)?.(activeView.file || undefined);
+          }
         }
       })
     );
@@ -167,9 +247,11 @@ export class TextlintHighlightPlugin extends Plugin {
     // ファイル修正時（デバウンス処理）
     this.registerEvent(
       this.app.vault.on('modify', (file) => {
-        const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (activeView && activeView.file === file) {
-          this.optimizedDebouncer?.();
+        if (this.settings.enableAutoLint) {
+          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (activeView && activeView.file === file) {
+            (this.optimizedDebouncer as any)?.(file);
+          }
         }
       })
     );
@@ -182,12 +264,14 @@ export class TextlintHighlightPlugin extends Plugin {
             console.log('New markdown file created:', file.path);
           }
           
-          this.memoryManager.runWhenIdle(() => {
-            const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-            if (activeView && activeView.file === file) {
-              this.lintCurrentFileImmediately();
-            }
-          });
+          if (this.settings.enableAutoLint) {
+            this.memoryManager.runWhenIdle(() => {
+              const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+              if (activeView && activeView.file === file) {
+                this.lintCurrentFileImmediately({ file });
+              }
+            });
+          }
         }
       })
     );
@@ -195,8 +279,11 @@ export class TextlintHighlightPlugin extends Plugin {
     // エディタペースト時（デバウンス処理）
     this.registerEvent(
       this.app.workspace.on('editor-paste', () => {
-        if (this.app.workspace.getActiveViewOfType(MarkdownView)) {
-          this.optimizedDebouncer?.();
+        if (this.settings.enableAutoLint) {
+          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (activeView?.file) {
+            (this.optimizedDebouncer as any)?.(activeView.file || undefined);
+          }
         }
       })
     );
@@ -204,10 +291,13 @@ export class TextlintHighlightPlugin extends Plugin {
     // レイアウト変更時（軽量化 - アイドル時実行）
     this.registerEvent(
       this.app.workspace.on('layout-change', () => {
-        if (this.app.workspace.getActiveViewOfType(MarkdownView)) {
-          this.memoryManager.runWhenIdle(() => {
-            this.optimizedDebouncer?.();
-          });
+        if (this.settings.enableAutoLint) {
+          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (activeView) {
+            this.memoryManager.runWhenIdle(() => {
+              (this.optimizedDebouncer as any)?.(activeView.file || undefined);
+            });
+          }
         }
       })
     );
@@ -215,8 +305,11 @@ export class TextlintHighlightPlugin extends Plugin {
     // キーボードショートカット検知（保存時は即座実行）
     this.registerDomEvent(document, 'keydown', (evt: KeyboardEvent) => {
       if ((evt.ctrlKey || evt.metaKey) && evt.key === 's') {
-        // 保存時は即座にlintを実行
-        this.throttledLinter?.();
+        // 保存時は自動ONなら軽く走らせる（ユーザー求めは自動のみ/リボン制御）
+        if (this.settings.enableAutoLint) {
+          const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (activeView?.file) this.lintCurrentFileImmediately({ file: activeView.file || undefined });
+        }
       }
     });
   }
@@ -241,6 +334,9 @@ export class TextlintHighlightPlugin extends Plugin {
   async saveSettings() {
     await this.saveData(this.settings);
     
+    // エラーハンドラーのデバッグモードを更新
+    this.errorHandler.setDebugMode(this.settings.enableDebugLog);
+    
     // 設定変更時はキャッシュをクリア
     this.contentCache.clear();
     this.resultCache.clear();
@@ -250,8 +346,13 @@ export class TextlintHighlightPlugin extends Plugin {
       this.ruleLoader.clearCache();
     }
     
-    // 設定変更を即時反映
-    this.lintCurrentFileImmediately();
+    // タイマー更新
+    this.recreateTimers();
+
+    // 設定変更を即時反映（自動ON時）
+    if (this.settings.enableAutoLint) {
+      this.lintCurrentFileImmediately();
+    }
   }
 
   // デバウンス処理を削除（MemoryManagerの最適化されたデバウンサーを使用）
@@ -260,15 +361,27 @@ export class TextlintHighlightPlugin extends Plugin {
     this.optimizedDebouncer?.();
   }
 
-  lintCurrentFileImmediately() {
-    // アイドル時間に実行するように変更
+  lintCurrentFileImmediately(options?: { force?: boolean; file?: TFile }) {
+    const force = options?.force === true;
+    if (!force && !this.settings.enableAutoLint) return;
+    const targetFile = options?.file || this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
+    if (!targetFile) return;
+    // アイドル時間に実行するように変更（対象ファイルを束縛）
     this.memoryManager.runWhenIdle(() => {
-      this.lintCurrentFile();
+      this.lintCurrentFile({ force, file: targetFile });
     });
   }
 
-  async lintCurrentFile() {
+  async lintCurrentFile(options?: { force?: boolean; file?: TFile }) {
+    const force = options?.force === true;
+    if (!force && !this.settings.enableAutoLint) {
+      if (this.settings.enableDebugLog) {
+        console.log('AutoLint disabled. Skipping lintCurrentFile.');
+      }
+      return;
+    }
     const startTime = performance.now();
+    const lintToken = ++this.currentLintToken;
     this.performanceStats.totalRequests++;
     
     if (this.settings.enableDebugLog) {
@@ -276,14 +389,14 @@ export class TextlintHighlightPlugin extends Plugin {
     }
     
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeView) {
+    if (!activeView && !options?.file) {
       if (this.settings.enableDebugLog) {
         console.log('アクティブなMarkdownViewが見つかりません');
       }
       return;
     }
 
-    const file = activeView.file;
+    const file = options?.file || activeView?.file;
     if (!file) {
       if (this.settings.enableDebugLog) {
         console.log('ファイルが見つかりません');
@@ -296,6 +409,26 @@ export class TextlintHighlightPlugin extends Plugin {
       await this.initializeHeavyDependencies();
       const content = await this.app.vault.read(file);
       const contentHash = await generateContentHash(content);
+
+      // ファイルサイズ制限（KB）: 0なら無制限、>0 なら厳密チェック
+      if ((this.settings.maxFileSizeKB ?? 512) > 0) {
+        const maxBytes = (this.settings.maxFileSizeKB || 512) * 1024;
+        let approxBytes = 0;
+        try {
+          approxBytes = new TextEncoder().encode(content).length;
+        } catch {
+          // フォールバック（概算）
+          approxBytes = content.length * 2;
+        }
+        if (approxBytes > maxBytes) {
+          if (this.settings.enableDebugLog) {
+            console.warn(`Skipping lint: file too large (${(approxBytes/1024).toFixed(1)}KB > ${this.settings.maxFileSizeKB}KB)`);
+          }
+          // ハイライトだけ消して終了
+          this.applyResults([], file);
+          return;
+        }
+      }
       
       // 適応的処理戦略を取得
       const strategy = AdaptiveProcessor.getOptimalStrategy(content);
@@ -317,7 +450,9 @@ export class TextlintHighlightPlugin extends Plugin {
         const cachedResult = this.resultCache.get(cacheKey);
         if (cachedResult) {
           this.performanceStats.cacheHits++;
-          this.applyResults(cachedResult, file);
+          if (lintToken === this.currentLintToken) {
+            this.applyResults(cachedResult, file);
+          }
           if (this.settings.enableDebugLog) {
             console.log('重複実行チェックでキャッシュから結果を適用:', cachedResult.length, '個の問題');
           }
@@ -342,7 +477,9 @@ export class TextlintHighlightPlugin extends Plugin {
           this.lastProcessedFile = file.path;
           this.lastContentHash = contentHash;
           
-          this.applyResults(cachedResult, file);
+          if (lintToken === this.currentLintToken) {
+            this.applyResults(cachedResult, file);
+          }
           return;
         }
       }
@@ -399,11 +536,63 @@ export class TextlintHighlightPlugin extends Plugin {
         console.log(`Textlintで${messages.length}個の問題を発見`);
       }
 
-      this.applyResults(messages, file);
+      if (lintToken === this.currentLintToken) {
+        this.applyResults(messages, file);
+      } else if (this.settings.enableDebugLog) {
+        console.log('Discarding outdated lint result');
+      }
 
     } catch (error) {
-      console.error("Textlintエラー:", error);
-      new Notice("Textlint エラーが発生しました: " + error.message);
+      // Use ErrorHandler for comprehensive error handling
+      const context = {
+        operation: 'textlint_processing',
+        file: file.path,
+        timestamp: Date.now(),
+        stackTrace: error.stack,
+        userAction: 'file_linting'
+      };
+
+      let strategy;
+      if (error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
+        strategy = this.errorHandler.handleProcessingTimeout(context);
+      } else if (error.message.includes('memory') || error.message.includes('heap')) {
+        const memoryStats = this.memoryManager.getPerformanceStats();
+        const contentCacheStats = this.contentCache.getStats();
+        const resultCacheStats = this.resultCache.getStats();
+        strategy = this.errorHandler.handleMemoryPressure({
+          heapUsed: 0, // Will be filled by actual memory info
+          heapTotal: 0,
+          external: 0,
+          cacheSize: contentCacheStats.size + resultCacheStats.size,
+          totalEntries: contentCacheStats.size + resultCacheStats.size
+        });
+      } else if (error.message.includes('RuleLoader')) {
+        strategy = this.errorHandler.handleRuleLoadError(error, 'unknown');
+      } else {
+        // Generic processing error
+        this.errorHandler.logError(error, context);
+        strategy = {
+          canRecover: true,
+          fallbackAction: async () => {
+            // Clear caches and try to continue
+            this.clearCache();
+          },
+          userMessage: `Processing error: ${error.message}. Caches cleared.`,
+          severity: ErrorSeverity.MEDIUM,
+          category: ErrorCategory.PROCESSING
+        };
+      }
+
+      // Execute recovery strategy
+      const errorKey = `processing_${file.path}_${Date.now()}`;
+      const recovered = await this.errorHandler.executeRecovery(strategy, errorKey);
+      
+      // Notify user based on severity
+      this.errorHandler.notifyUser(strategy);
+
+      if (!recovered && this.settings.enableDebugLog) {
+        console.error("Failed to recover from error:", error);
+      }
     } finally {
       const endTime = performance.now();
       this.performanceStats.totalLintTime += endTime - startTime;
@@ -416,10 +605,15 @@ export class TextlintHighlightPlugin extends Plugin {
   }
 
   private applyResults(messages: TextlintMessage[], file: TFile) {
-    // 1つのトランザクションでハイライトを更新
-    this.editorExtension.updateHighlights(messages);
+    // アクティブファイルに対してのみハイライトを適用
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (activeView?.file?.path === file.path) {
+      this.editorExtension.updateHighlights(messages);
+    } else if (this.settings.enableDebugLog) {
+      console.log('Active file changed. Skipping highlight apply for', file.path);
+    }
 
-    // ビューを更新
+    // ビューは対象ファイルも併記して更新
     this.updateTextlintView(messages, file);
   }
 
@@ -607,5 +801,26 @@ export class TextlintHighlightPlugin extends Plugin {
       totalLintTime: 0,
       totalRequests: 0
     };
+  }
+
+  /**
+   * エラー統計を取得
+   */
+  getErrorStats() {
+    return this.errorHandler.getErrorStats();
+  }
+
+  /**
+   * エラーログをクリア
+   */
+  clearErrorLog() {
+    this.errorHandler.clearErrorLog();
+  }
+
+  /**
+   * エラーハンドラーのインスタンスを取得（他のコンポーネントで使用）
+   */
+  getErrorHandler(): ErrorHandler {
+    return this.errorHandler;
   }
 } 

@@ -325,22 +325,23 @@ export class MemoryManager {
     }
   }
 
-  public createOptimizedDebouncer(
-    callback: () => void,
+  public createOptimizedDebouncer<Fn extends (...args: any[]) => void>(
+    callback: Fn,
     delay: number = 300
-  ): () => void {
+  ): (...args: Parameters<Fn>) => void {
     let timeoutId: NodeJS.Timeout | null = null;
     let lastArgs: any[] | null = null;
-    
-    return (...args: any[]) => {
+
+    return ((...args: any[]) => {
       lastArgs = args;
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
       timeoutId = setTimeout(() => {
-        callback.apply(null, lastArgs);
+        // 型安全に呼び出し
+        (callback as (...a: any[]) => void).apply(null, lastArgs || []);
       }, delay);
-    };
+    }) as (...args: Parameters<Fn>) => void;
   }
 
   public createThrottler(

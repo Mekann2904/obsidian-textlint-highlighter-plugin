@@ -1,12 +1,15 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import { TextlintPluginSettings } from '../types';
+import { ErrorHandler, ErrorSeverity, ErrorCategory } from '../utils/ErrorHandler';
 
 export class TextlintSettingTab extends PluginSettingTab {
   plugin: any;
+  private errorHandler: ErrorHandler;
 
   constructor(app: App, plugin: any) {
     super(app, plugin);
     this.plugin = plugin;
+    this.errorHandler = ErrorHandler.getInstance();
   }
 
   display(): void {
@@ -226,6 +229,53 @@ export class TextlintSettingTab extends PluginSettingTab {
       attr: { style: 'background: var(--background-primary-alt); border-radius: 8px; padding: 20px; margin-bottom: 20px;' }
     });
 
+    // 自動解析のON/OFF（リボンからも切り替え可能）
+    const autoEl = new Setting(systemContainer)
+      .setName('自動解析を有効化')
+      .setDesc('リボンのハイライターアイコンからも一時的に切り替えできます')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.enableAutoLint)
+        .onChange(async (value) => {
+          this.plugin.settings.enableAutoLint = value;
+          await this.plugin.saveSettings();
+          if (!value) {
+            this.plugin.editorExtension.updateHighlights([]);
+            this.app.workspace.detachLeavesOfType('textlint-view');
+          } else {
+            this.plugin.lintCurrentFileImmediately();
+          }
+        }));
+
+    // デバウンス時間
+    const debounceEl = new Setting(systemContainer)
+      .setName('デバウンス (ms)')
+      .setDesc('連続入力時の待機時間。大きくすると軽くなります')
+      .addText(text => text
+        .setPlaceholder('600')
+        .setValue(String(this.plugin.settings.debounceMs))
+        .onChange(async (val) => {
+          const n = parseInt(val, 10);
+          if (!isNaN(n) && n >= 100 && n <= 5000) {
+            this.plugin.settings.debounceMs = n;
+            await this.plugin.saveSettings();
+          }
+        }));
+
+    // 最大ファイルサイズ
+    const sizeEl = new Setting(systemContainer)
+      .setName('最大ファイルサイズ (KB)')
+      .setDesc('このサイズを超えるファイルは解析をスキップします。0で無制限')
+      .addText(text => text
+        .setPlaceholder('512')
+        .setValue(String(this.plugin.settings.maxFileSizeKB))
+        .onChange(async (val) => {
+          const n = parseInt(val, 10);
+          if (!isNaN(n) && n >= 0 && n <= 8192) {
+            this.plugin.settings.maxFileSizeKB = n;
+            await this.plugin.saveSettings();
+          }
+        }));
+
     const systemSettingEl1 = new Setting(systemContainer)
       .setName('Kuromoji使用')
       .setDesc('日本語形態素解析エンジン（処理が重くなる場合は無効にしてください）')
@@ -247,8 +297,8 @@ export class TextlintSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    // トグルボタンの位置調整
-    [systemSettingEl1, systemSettingEl2].forEach(settingEl => {
+    // コントロールの位置調整
+    [autoEl, debounceEl, sizeEl, systemSettingEl1, systemSettingEl2].forEach(settingEl => {
       const toggleWrapper = settingEl.settingEl.querySelector('.setting-item-control');
       if (toggleWrapper) {
         (toggleWrapper as HTMLElement).style.minWidth = '60px';
@@ -308,6 +358,12 @@ export class TextlintSettingTab extends PluginSettingTab {
       container.createEl('br');
       container.createEl('span', { text: `設定: ${stats.config.size}個` });
     } catch (error) {
+      // Use ErrorHandler for configuration errors
+      const strategy = this.errorHandler.handleConfigurationError(error, 'cache_stats');
+      this.errorHandler.notifyUser(strategy);
+      const errorKey = `cache_stats_${Date.now()}`;
+      this.errorHandler.executeRecovery(strategy, errorKey);
+      
       container.createEl('span', { text: 'キャッシュ統計の取得に失敗しました' });
     }
   }
