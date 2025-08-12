@@ -5,6 +5,8 @@ export interface TextlintPluginSettings {
   maxFileSizeKB: number;
   // 自動解析の有効/無効（リボンおよび設定から切り替え）
   enableAutoLint: boolean;
+  // ステータスバー表示
+  showStatusBar: boolean;
   useTechnicalWritingPreset: boolean;
   useSpacingPreset: boolean;
   useJtfStylePreset: boolean;
@@ -12,6 +14,9 @@ export interface TextlintPluginSettings {
   useCustomRules: boolean;
   enableDebugLog: boolean;
   useKuromoji: boolean;
+  // PRH設定ファイル（Vault内パス/絶対パス）
+  prhYamlPath?: string;
+  prhYamlAbsPath?: string;
   // 個別ルール設定
   useNoDroppingI: boolean;
   useNoInsertDroppingSa: boolean;
@@ -32,6 +37,7 @@ export const DEFAULT_SETTINGS: TextlintPluginSettings = {
   debounceMs: 600,
   maxFileSizeKB: 512,
   enableAutoLint: true,
+  showStatusBar: true,
   useTechnicalWritingPreset: true,
   useSpacingPreset: true,
   useJtfStylePreset: true,
@@ -39,6 +45,8 @@ export const DEFAULT_SETTINGS: TextlintPluginSettings = {
   useCustomRules: true,
   enableDebugLog: true,
   useKuromoji: true,
+  prhYamlPath: '',
+  prhYamlAbsPath: '',
   useNoDroppingI: true,
   useNoInsertDroppingSa: true,
   useNoDoubledJoshi: true,

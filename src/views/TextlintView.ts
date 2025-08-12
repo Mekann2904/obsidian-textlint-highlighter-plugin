@@ -167,6 +167,42 @@ export class TextlintView extends ItemView {
         cls: "textlint-rule-id"
       });
     }
+
+    // 自動修正が可能な場合は Fix ボタンを表示
+    if (message.fix) {
+      const fixBtn = rightSection.createEl("button", { cls: "textlint-fix-btn", text: "Fix" });
+      fixBtn.onclick = async (e) => {
+        e.stopPropagation();
+        try {
+          const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (!view) return;
+          const editor = view.editor;
+
+          const start = { line: Math.max(0, (message.line || 1) - 1), ch: Math.max(0, (message.column || 1) - 1) };
+          const end = {
+            line: Math.max(0, ((message.endLine ?? message.line) || 1) - 1),
+            ch: Math.max(0, ((message.endColumn ?? message.column) || 1) - 1)
+          };
+
+          const from = editor.posToOffset(start);
+          const to = editor.posToOffset(end);
+          const safeFrom = Math.max(0, Math.min(from, to));
+          const safeTo = Math.max(safeFrom, Math.max(from, to));
+
+          const fix = message.fix!;
+          editor.replaceRange(fix.text, editor.offsetToPos(safeFrom), editor.offsetToPos(safeTo));
+          // Fix 適用後に即時再Lint
+          try {
+            this.plugin.lintCurrentFileImmediately({ force: true, file: this.currentFile || undefined });
+          } catch {}
+        } catch (error) {
+          const strategy = this.errorHandler.handleUIError(error as any, 'TextlintView.applyFix');
+          this.errorHandler.notifyUser(strategy);
+          const errorKey = `apply_fix_${Date.now()}`;
+          this.errorHandler.executeRecovery(strategy, errorKey);
+        }
+      };
+    }
     
     const messageEl = cardEl.createEl("div", { 
       text: message.message,

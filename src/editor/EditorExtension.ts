@@ -10,6 +10,7 @@ export class EditorExtension {
   private enableDebugLog: boolean = false;
   private memoryManager: MemoryManager;
   private errorHandler: ErrorHandler;
+  private installedEditors: WeakSet<any> = new WeakSet();
 
   // State effects for managing highlights
   public updateHighlightsEffect = StateEffect.define<TextlintMessage[]>();
@@ -385,9 +386,15 @@ export class EditorExtension {
           const cm = (view as any).editor?.cm;
           if (cm) {
             try {
-              cm.dispatch({ effects: StateEffect.appendConfig.of(this.getExtensions()) });
-              if (this.enableDebugLog) {
-                console.log('Applied CM extensions to existing editor');
+              // すでにインストール済みなら二重適用を避ける
+              if (this.installedEditors.has(cm)) {
+                if (this.enableDebugLog) console.log('Skipped applying extensions (already installed)');
+              } else {
+                cm.dispatch({ effects: StateEffect.appendConfig.of(this.getExtensions()) });
+                this.installedEditors.add(cm);
+                if (this.enableDebugLog) {
+                  console.log('Applied CM extensions to existing editor');
+                }
               }
             } catch (e) {
               if (this.enableDebugLog) console.warn('Failed to append CM config:', e);

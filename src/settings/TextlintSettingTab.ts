@@ -1,6 +1,7 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, PluginSettingTab, Setting, TFile } from 'obsidian';
 import { TextlintPluginSettings } from '../types';
 import { ErrorHandler, ErrorSeverity, ErrorCategory } from '../utils/ErrorHandler';
+import { YamlFileSuggestModal } from '../utils/YamlFileSuggestModal';
 
 export class TextlintSettingTab extends PluginSettingTab {
   plugin: any;
@@ -214,6 +215,34 @@ export class TextlintSettingTab extends PluginSettingTab {
         (toggleWrapper as HTMLElement).style.alignItems = 'center';
       }
     });
+
+    // PRH設定ファイル選択（usePrh 有効時に有効）
+    const prhSetting = new Setting(ruleContainer)
+      .setName('PRH設定ファイル')
+      .setDesc('Vault内の prh.yml を選択（textlint-rule-prh 用）')
+      .addButton(btn => btn
+        .setButtonText('選択')
+        .onClick(() => {
+          new YamlFileSuggestModal(this.app, async (file: TFile) => {
+            this.plugin.settings.prhYamlPath = file.path;
+            // 可能なら絶対パスも保存（デスクトップのみ）
+            try {
+              const adapter: any = this.app.vault.adapter as any;
+              if (adapter?.getFullPath) {
+                this.plugin.settings.prhYamlAbsPath = adapter.getFullPath(file.path);
+              } else if (adapter?.basePath) {
+                this.plugin.settings.prhYamlAbsPath = adapter.basePath + '/' + file.path;
+              }
+            } catch {}
+            await this.plugin.saveSettings();
+            prhPathText.setText(this.plugin.settings.prhYamlPath || '(未選択)');
+          }).open();
+        }));
+
+    const prhPathText = prhSetting.settingEl.createEl('div', {
+      text: this.plugin.settings.prhYamlPath || '(未選択)',
+      attr: { style: 'margin-top: 6px; color: var(--text-muted); font-size: 0.9em;' }
+    });
   }
 
   private createSystemSection() {
@@ -244,6 +273,17 @@ export class TextlintSettingTab extends PluginSettingTab {
           } else {
             this.plugin.lintCurrentFileImmediately();
           }
+        }));
+
+    // ステータスバー表示
+    const statusBarEl = new Setting(systemContainer)
+      .setName('ステータスバーを表示')
+      .setDesc('Lintの進行状況や結果件数をステータスバーに表示します')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.showStatusBar)
+        .onChange(async (value) => {
+          this.plugin.settings.showStatusBar = value;
+          await this.plugin.saveSettings();
         }));
 
     // デバウンス時間
