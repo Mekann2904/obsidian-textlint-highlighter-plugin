@@ -297,28 +297,41 @@ export class RuleLoader {
   private async loadIndividualRules(settings: TextlintPluginSettings): Promise<TextlintRule[]> {
     const rules: TextlintRule[] = [];
     
-    // プラグインディレクトリの絶対パスを取得（複数候補を試す）
+    // PRH設定ファイル（設定で選択されたパスを最優先）
+    // Electron環境では絶対パス（prhYamlAbsPath）を優先し、無ければ従来の候補探索
     const currentDir = process.cwd();
-    const pathCandidates = [
-      path.join(currentDir, 'prh.yml'),
-      path.join(currentDir, '..', '..', '..', 'plugins', 'obsidian-textlint-highlighter-plugin', 'prh.yml'),
-      path.join(__dirname || currentDir, 'prh.yml'),
-      path.join(__dirname || currentDir, '..', 'prh.yml'),
-      path.join(__dirname || currentDir, '..', '..', 'prh.yml')
-    ];
-    
     let prhConfigPath = '';
-    for (const candidate of pathCandidates) {
-      if (fs.existsSync(candidate)) {
-        prhConfigPath = candidate;
-        break;
+    if (settings.prhYamlAbsPath && typeof settings.prhYamlAbsPath === 'string') {
+      if (!fs.existsSync(settings.prhYamlAbsPath)) {
+        console.warn(`指定されたPRHファイルが見つかりません: ${settings.prhYamlAbsPath}`);
+      } else {
+        prhConfigPath = settings.prhYamlAbsPath;
+      }
+    }
+    if (!prhConfigPath) {
+      const pathCandidates = [
+        path.join(currentDir, 'prh.yml'),
+        path.join(currentDir, '..', '..', '..', 'plugins', 'obsidian-textlint-highlighter-plugin', 'prh.yml'),
+        path.join(__dirname || currentDir, 'prh.yml'),
+        path.join(__dirname || currentDir, '..', 'prh.yml'),
+        path.join(__dirname || currentDir, '..', '..', 'prh.yml')
+      ];
+      for (const candidate of pathCandidates) {
+        if (fs.existsSync(candidate)) {
+          prhConfigPath = candidate;
+          break;
+        }
       }
     }
     
     if (this.enableDebugLog) {
       console.log(`Current directory: ${currentDir}`);
-      console.log(`Tried paths:`, pathCandidates);
-      console.log(`Found PRH config at: ${prhConfigPath}`);
+      if (settings.prhYamlAbsPath) console.log(`Settings PRH path: ${settings.prhYamlAbsPath}`);
+      if (!prhConfigPath) {
+        console.log(`PRH config not resolved by settings; falling back to path candidates.`);
+      } else {
+        console.log(`Found PRH config at: ${prhConfigPath}`);
+      }
     }
     
     if (settings.usePrh && prhConfigPath === '') {

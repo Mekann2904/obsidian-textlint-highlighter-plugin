@@ -26,6 +26,7 @@ export class TextlintHighlightPlugin extends Plugin {
   private memoryManager: MemoryManager;
   private errorHandler: ErrorHandler;
   private ribbonEl: HTMLElement | null = null;
+  private statusBarItemEl: HTMLElement | null = null;
   
   // Performance tracking - 最適化されたデバウンス処理
   private optimizedDebouncer: (() => void) | null = null;
@@ -61,6 +62,8 @@ export class TextlintHighlightPlugin extends Plugin {
     
     // UI コンポーネントの設定
     this.setupUI();
+    // コマンドの登録
+    this.registerCommands();
     
     // 最適化されたイベントリスナーの設定
     this.setupOptimizedEventListeners();
@@ -133,11 +136,51 @@ export class TextlintHighlightPlugin extends Plugin {
     // リボンの追加（ON/OFF トグル）
     this.setupRibbonToggle();
 
+    // ステータスバー
+    if (this.settings.showStatusBar) {
+      this.statusBarItemEl = this.addStatusBarItem();
+      this.updateStatusBar('idle');
+    }
+
     // ビューの登録
     this.registerView(
       VIEW_TYPE_TEXTLINT,
       (leaf) => new TextlintView(leaf, this)
     );
+  }
+
+  private registerCommands() {
+    try {
+      this.addCommand({
+        id: 'textlint-lint-current',
+        name: 'Textlint: 現在のファイルをチェック',
+        callback: () => this.lintCurrentFileImmediately({ force: true })
+      });
+
+      this.addCommand({
+        id: 'textlint-toggle-autolint',
+        name: 'Textlint: 自動解析 ON/OFF',
+        callback: () => this.toggleAutoLint()
+      });
+
+      this.addCommand({
+        id: 'textlint-open-view',
+        name: 'Textlint: サイドビューを開く',
+        callback: () => this.activateView()
+      });
+    } catch (e) {
+      console.error('Failed to register commands:', e);
+    }
+  }
+
+  private updateStatusBar(state: 'idle' | 'running' | 'done' | 'skipped', info?: { errors?: number; warnings?: number }) {
+    if (!this.statusBarItemEl || !this.settings.showStatusBar) return;
+    const label =
+      state === 'running' ? 'Textlint: 実行中…' :
+      state === 'done' ? `Textlint: 完了${info ? ` (E:${info.errors ?? 0} W:${info.warnings ?? 0})` : ''}` :
+      state === 'skipped' ? 'Textlint: スキップ' :
+      'Textlint: 待機中';
+    this.statusBarItemEl.setText(label);
   }
 
   private setupRibbonToggle() {
@@ -321,6 +364,11 @@ export class TextlintHighlightPlugin extends Plugin {
     // キャッシュクリア
     this.contentCache.clear();
     this.resultCache.clear();
+    // ステータスバー除去
+    if (this.statusBarItemEl) {
+      this.statusBarItemEl.remove();
+      this.statusBarItemEl = null;
+    }
     
     if (this.settings.enableDebugLog) {
       console.log('パフォーマンス統計:', this.performanceStats);
@@ -348,6 +396,17 @@ export class TextlintHighlightPlugin extends Plugin {
     
     // タイマー更新
     this.recreateTimers();
+
+    // ステータスバー反映
+    if (this.settings.showStatusBar) {
+      if (!this.statusBarItemEl) this.statusBarItemEl = this.addStatusBarItem();
+      this.updateStatusBar('idle');
+    } else {
+      if (this.statusBarItemEl) {
+        this.statusBarItemEl.remove();
+        this.statusBarItemEl = null;
+      }
+    }
 
     // 設定変更を即時反映（自動ON時）
     if (this.settings.enableAutoLint) {
@@ -381,6 +440,7 @@ export class TextlintHighlightPlugin extends Plugin {
       return;
     }
     const startTime = performance.now();
+    this.updateStatusBar('running');
     const lintToken = ++this.currentLintToken;
     this.performanceStats.totalRequests++;
     
@@ -426,6 +486,7 @@ export class TextlintHighlightPlugin extends Plugin {
           }
           // ハイライトだけ消して終了
           this.applyResults([], file);
+          this.updateStatusBar('skipped');
           return;
         }
       }
@@ -596,6 +657,8 @@ export class TextlintHighlightPlugin extends Plugin {
     } finally {
       const endTime = performance.now();
       this.performanceStats.totalLintTime += endTime - startTime;
+      // 状態バー更新（直近結果から件数推定は難しいので待機へ）
+      this.updateStatusBar('done');
       
       if (this.settings.enableDebugLog) {
         console.log(`処理時間: ${(endTime - startTime).toFixed(2)}ms`);
@@ -615,6 +678,13 @@ export class TextlintHighlightPlugin extends Plugin {
 
     // ビューは対象ファイルも併記して更新
     this.updateTextlintView(messages, file);
+
+    // ステータスバー更新（件数集計）
+    try {
+      const errors = messages.filter(m => m.severity === 2).length;
+      const warnings = messages.filter(m => m.severity === 1).length;
+      this.updateStatusBar('done', { errors, warnings });
+    } catch {}
   }
 
   private updateTextlintView(messages: TextlintMessage[], file: TFile) {
